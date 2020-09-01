@@ -1,6 +1,7 @@
 ﻿using Ch.LichessTypes;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -14,22 +15,68 @@ using System.Threading;
 
 namespace Ch
 {
-    static class Lichess
+    class Lichess
     {
         const string TOKEN = "02RchmSYpcJt87OJ";
-        private const string EVENTSTREAM_URI = "https://lichess.org/api/stream/event";
 
         readonly static TimeSpan TIMEOUT = new TimeSpan(0, 0, 1);
-        private static readonly HttpClient client = new HttpClient();
 
 
-        static Lichess()
+        public ConcurrentQueue<Event> Events { get; private set; } = new ConcurrentQueue<Event>();
+        public ConcurrentQueue<GameEvent> GameEvents { get; private set; } = new ConcurrentQueue<GameEvent>();
+
+        private readonly CancellationTokenSource cancellationTokenSource_ = new CancellationTokenSource();
+        private Thread eventThread_;
+        private Thread gameThread_;
+
+        public Lichess()
         {
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", TOKEN);
+            StartEventThread();
         }
 
-        private static string HttpGet(string uri)
+        ~Lichess()
         {
+            CancelSidethreads();
+        }
+
+        private void CancelSidethreads()
+        {
+            cancellationTokenSource_.Cancel();
+
+            eventThread_?.Join();
+            gameThread_?.Join();
+        }
+
+        private void StartEventThread()
+        {
+            eventThread_ = new Thread(() => HttpStream("https://lichess.org/api/stream/event", Events));
+            eventThread_.Start();
+        }
+
+        public void BeginGameListen(string gameId)
+        {
+            if (gameThread_ != null)
+                EndGameListen();
+
+            gameThread_ = new Thread(() => HttpStream($"https://lichess.org/api/bot/game/stream/{gameId}", GameEvents));
+            gameThread_.Start();
+        }
+
+        public void EndGameListen()
+        {
+            CancelSidethreads();
+
+            gameThread_ = null;
+
+            // Restart event thread
+            StartEventThread();
+        }
+
+
+        private string HttpGet(string uri)
+        {
+            HttpClient client = GetClient();
+
             var task = client.GetStringAsync(uri);
 
             // wait up till one second
@@ -37,79 +84,83 @@ namespace Ch
                 return null;
 
             return task.Result;
-
         }
 
-        internal static List<string> GetGames()
+        private T HttpGet<T>(string uri) => JsonConvert.DeserializeObject<T>(HttpGet(uri));
+
+        private void HttpPost(string uri, HttpContent content)
         {
-            return HttpGetLines<Event>(EVENTSTREAM_URI).Where(x => x.type == "gameStart").Select(x => x.game.id).ToList();
-        }
+            HttpClient client = GetClient();
 
-        internal static void Accept(string gameId)
-        {
-            HttpPost($"https://lichess.org/api/challenge/{gameId}/accept", new StringContent(""));
-        }
-
-        private static T HttpGet<T>(string uri)
-        {
-            return JsonConvert.DeserializeObject<T>(HttpGet(uri));
-        }
-
-        private static List<T> HttpGetLines<T>(string uri)
-        {
-            WebRequest request = WebRequest.Create(uri);
-            request.Headers.Add(HttpRequestHeader.Authorization, "Bearer " + TOKEN);
-            request.Timeout = (int)TIMEOUT.TotalMilliseconds;
-
-            var responseStream = request.GetResponse().GetResponseStream();
-
-            StreamReader reader = new StreamReader(responseStream);
-
-            var result = new List<T>();
-            string line = reader.ReadLine();
-            while (line?.Length > 0)
-            {
-                result.Add(JsonConvert.DeserializeObject<T>(line));
-                line = reader.ReadLine();
-            }
-
-            return result;
-        }
-
-        private static void HttpPost(string uri, HttpContent content)
-        {
             var result = client.PostAsync(uri, content).Result;
 
             if (!result.IsSuccessStatusCode)
                 throw new WebException("NOT OK: " + result.ReasonPhrase + " " + result.Content.ReadAsStringAsync().Result);
         }
 
-        private static void HttpPost(string uri) => HttpPost(uri, new StringContent(""));
+        private void HttpPost(string uri) => HttpPost(uri, new StringContent(""));
 
-        public static string GetUsername()
+        private void HttpStream<T>(string uri, ConcurrentQueue<T> target)
         {
-            return HttpGet<Account>("https://lichess.org/api/account").username;
+            WebRequest request = WebRequest.Create(uri);
+            request.Headers.Add(HttpRequestHeader.Authorization, "Bearer " + TOKEN);
+            request.Timeout = (int)TIMEOUT.TotalMilliseconds;
+
+            WebResponse webResponse = request.GetResponse();
+            var responseStream = webResponse.GetResponseStream();
+
+            StreamReader reader = new StreamReader(responseStream);
+
+            string line;
+            while (!reader.EndOfStream && !cancellationTokenSource_.Token.IsCancellationRequested)
+            {
+                line = reader.ReadLine();
+
+                if (line?.Length > 0)
+                    target.Enqueue(JsonConvert.DeserializeObject<T>(line));
+            }
         }
 
-        public static List<string> GetChallenges()
+        private static HttpClient GetClient()
         {
-            return HttpGetLines<Event>(EVENTSTREAM_URI)
-                .Where(x => x.type == "challenge").Select(x => x.challenge.id).ToList();
+            HttpClient client = new HttpClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", TOKEN);
+            return client;
         }
 
-        public static void Chat(string gameId, string message)
+        private IEnumerable<Event> ConsumeEvents()
         {
+            while (Events.TryDequeue(out Event ev))
+                yield return ev;
+        }
+
+        private IEnumerable<GameEvent> ConsumeGameEvents()
+        {
+            while (GameEvents.TryDequeue(out GameEvent ev))
+                yield return ev;
+        }
+
+        public List<GameEvent> GetGameEvents() => ConsumeGameEvents().Where(x => x.type == "gameFull").ToList();
+
+        public List<string> GetGameIds() => ConsumeEvents().Where(x => x.type == "gameStart").Select(x => x.game.id).ToList();
+
+        public List<string> GetChallenges() => ConsumeEvents().Where(x => x.type == "challenge").Select(x => x.challenge.id).ToList();
+
+        public string GetUsername() => HttpGet<Account>("https://lichess.org/api/account").username;
+
+        public void Chat(string gameId, string message) =>
             // prepare
-            var content = new FormUrlEncodedContent(new Dictionary<string, string>{
-                {  "room", "player"},
+            HttpPost($"https://lichess.org/api/bot/game/{gameId}/chat", new FormUrlEncodedContent(new Dictionary<string, string>{
+                { "room", "player"},
                 { "text", message}
-            });
-            HttpPost($"https://lichess.org/api/bot/game/{gameId}/chat", content);
-        }
+            }));
 
-        public static void Resign(string runningGame)
+        public void Accept(string challengeId) => HttpPost($"https://lichess.org/api/challenge/{challengeId}/accept", new StringContent(""));
+        public void Resign(string runningGame) => HttpPost($"https://lichess.org/api/bot/game/{runningGame}/resign");
+
+        public void Move(string gameId, string move)
         {
-            HttpPost($"https://lichess.org/api/bot/game/{runningGame}/resign");
+            HttpPost($"https://lichess.org/api/bot/game/{gameId}/move/{move}");
         }
     }
 }

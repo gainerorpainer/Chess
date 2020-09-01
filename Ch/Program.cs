@@ -1,4 +1,7 @@
-﻿using System;
+﻿using Ch.LichessTypes;
+using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading;
@@ -8,57 +11,80 @@ namespace Ch
     class Program
     {
 
+
         static void Main(string[] args)
         {
+            // start a thread for listening for events
+            Lichess lichess = new Lichess();
+
             Console.WriteLine("Setting up connection...");
-            Console.WriteLine($"Logged in as \"{Lichess.GetUsername()}\"");
+            Console.WriteLine($"Logged in as \"{lichess.GetUsername()}\"");
 
             Console.WriteLine("Checking running games...");
-            foreach (var runningGame in Lichess.GetGames())
+            foreach (var runningGame in lichess.GetGameIds())
             {
-                Lichess.Resign(runningGame);
+                lichess.Resign(runningGame);
                 Console.WriteLine($"Resigned \"{runningGame}\"");
             }
 
             Console.WriteLine("Waiting you to invite me to a game..");
 
-            string challengeId;
+            string challengeId = WaitForFirst(() => lichess.GetChallenges());
+            Console.WriteLine($"Taking challenge: \"{challengeId}\"");
 
+            lichess.Accept(challengeId);
+
+            string gameId = WaitForFirst(() => lichess.GetGameIds());
+            Console.WriteLine($"Taking game: \"{gameId}\"");
+
+            lichess.BeginGameListen(gameId);
+
+            GameStartEvent gameStart = new GameStartEvent(WaitForFirst(() => lichess.GetGameEvents()));
+
+            lichess.Chat(gameId, "Hello from LorenzoBot");
+
+            // load engine
+            Bot bot = new Bot(gameStart, (move) => lichess.Move(gameId, move));
+
+            // until game end, see if i need to move
+            while (true)
+            {
+                GameEvent ev = WaitForFirst(() => lichess.GetGameEvents());
+
+                if (ev.type == "gameState" && ev.status == "resign")
+                    break;
+
+                if (ev.type == "gameState")
+                    bot.MakeMove(ev.moves);
+            }
+        }
+
+        private static T WaitForFirst<T>(Func<List<T>> source)
+        {
             do
             {
-                var challenges = Lichess.GetChallenges();
+                var items = source();
+                if (items.Count > 0)
+                    return items.First();
 
-                if (challenges.Count > 0)
-                {
-                    challengeId = challenges.First();
-                    Console.WriteLine($"Taking challenge: \"{challengeId}\"");
-                    break;
-                }
-
-                Console.WriteLine("No challenges yet...");
+                // Animation
+                Console.Write("/");
                 Thread.Sleep(250);
-            } while (true);
 
-            Lichess.Accept(challengeId);
-
-            string gameId;
-
-            do
-            {
-                var games = Lichess.GetGames();
-
-                if (games.Count > 0)
-                {
-                    gameId = games.First();
-                    Console.WriteLine($"Taking game: \"{gameId}\"");
-                    break;
-                }
-
-                Console.WriteLine("No challenges yet...");
+                ClearCurrentConsoleLine();
+                Console.Write("\\");
                 Thread.Sleep(250);
-            } while (true);
 
-            Lichess.Chat(gameId, "Hello from LorenzoBot");
+                ClearCurrentConsoleLine();
+            } while (true);
+        }
+
+        public static void ClearCurrentConsoleLine()
+        {
+            int currentLineCursor = Console.CursorTop;
+            Console.SetCursorPosition(0, Console.CursorTop);
+            Console.Write(new string(' ', Console.WindowWidth));
+            Console.SetCursorPosition(0, currentLineCursor);
         }
     }
 }
