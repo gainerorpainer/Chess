@@ -140,7 +140,7 @@ namespace Ch
                 yield return ev;
         }
 
-        public List<GameEvent> GetGameEvents() => ConsumeGameEvents().Where(x => x.type == "gameFull").ToList();
+        public List<GameEvent> GetGameEvents() => ConsumeGameEvents().ToList();
 
         public List<string> GetGameIds() => ConsumeEvents().Where(x => x.type == "gameStart").Select(x => x.game.id).ToList();
 
