@@ -8,16 +8,14 @@ namespace ChEngine
 {
     public class Engine
     {
-        public event EventHandler<string> MoveDecided;
+        //public event EventHandler<string> MoveDecided;
         public bool IsWhite { get; set; }
 
         private CancellationTokenSource cancellationTokenSource;
 
-        private readonly object mutex = new object();
-
         public Engine(string beginMoves)
         {
-            IsWhite = beginMoves.Length == 0;
+            IsWhite = beginMoves.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length % 2 == 1;
         }
 
         public string ReactToMove(string moves)
@@ -32,8 +30,10 @@ namespace ChEngine
             cancellationTokenSource.CancelAfter(3000);
 
             List<string> myMoves = newBoard.GetLegalMoves();
+
             // There must be at least one move, otherwise this would already be checkmate!
             bestMove = myMoves.First();
+            object mutex = new object();
 
             foreach (var myMove in myMoves)
             {

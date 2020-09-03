@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Reflection.Metadata.Ecma335;
+using System.Runtime.CompilerServices;
 
 namespace ChEngine
 {
-    enum AllowedGameState
+    public enum AllowedGameState
     {
         Normal,
         Check,
@@ -17,12 +18,12 @@ namespace ChEngine
     {
         public Figure[] Fields;
         public bool IsWhiteToMove;
-        public Cache Cache;
+        public readonly Cache Cache;
 
         public Board(string moves)
         {
             Fields = new Figure[8 * 8];
-            Cache = null;
+            Cache = new Cache();
 
             // Standard config: pawns
             for (int i = 8; i < 8 + 8; i++)
@@ -40,26 +41,26 @@ namespace ChEngine
             Fields[1] = new Figure(true, FigureType.Knight);
             Fields[1 + sevenRows] = new Figure(false, FigureType.Knight);
 
-            Fields[2] = new Figure(true, FigureType.Rook);
+            Fields[2] = new Figure(true, FigureType.Bishop);
             Fields[2 + sevenRows] = new Figure(false, FigureType.Bishop);
 
-            Fields[3] = new Figure(true, FigureType.Rook);
+            Fields[3] = new Figure(true, FigureType.Queen);
             Fields[3 + sevenRows] = new Figure(false, FigureType.Queen);
 
-            Fields[4] = new Figure(true, FigureType.Rook);
+            Fields[4] = new Figure(true, FigureType.King);
             Fields[4 + sevenRows] = new Figure(false, FigureType.King);
 
-            Fields[5] = new Figure(true, FigureType.Rook);
+            Fields[5] = new Figure(true, FigureType.Bishop);
             Fields[5 + sevenRows] = new Figure(false, FigureType.Bishop);
 
-            Fields[6] = new Figure(true, FigureType.Rook);
+            Fields[6] = new Figure(true, FigureType.Knight);
             Fields[6 + sevenRows] = new Figure(false, FigureType.Knight);
 
             Fields[7] = new Figure(true, FigureType.Rook);
             Fields[7 + sevenRows] = new Figure(false, FigureType.Rook);
 
             // Apply all mutations
-            string[] movesSplitted = moves.Split(' ');
+            string[] movesSplitted = moves.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             IsWhiteToMove = movesSplitted.Length % 2 == 0;
             foreach (var move in movesSplitted)
                 Mutate(move);
@@ -82,19 +83,46 @@ namespace ChEngine
             Figure figureTo = Fields[toIndex];
 
             Fields[toIndex] = figureFrom;
+
+            // Flip who is to move
+            IsWhiteToMove = !IsWhiteToMove;
+
+            // Disvalidate Cache
+            Cache.Clear();
         }
 
-        public static int GetIndex(string from) => 8 * (from[0] - 'a') + (from[1] - '1');
+        public static int GetIndex(string from) => (from[0] - 'a') + 8 * (from[1] - '1');
 
-        public static string GetUIC(int index) => new string(new char[] { (char)((index % 8) + 'a'), (char)((index / 8) + '1') });
+        public static string GetUCI(int from, int to, MoveType type)
+        {
+            return type switch
+            {
+                MoveType.Move => IToStr(from) + IToStr(to),
+                MoveType.Take => IToStr(from) + 'x' + IToStr(to),
+                MoveType.PromoteKnight => IToStr(from) + IToStr(to) + "N",
+                MoveType.PromoteBishop => IToStr(from) + IToStr(to) + "B",
+                MoveType.PromoteRook => IToStr(from) + IToStr(to) + "R",
+                MoveType.PromoteQueen => IToStr(from) + IToStr(to) + "Q",
+                MoveType.CastleKingside => "0-0",
+                MoveType.CastleQueenside => "0-0-0",
+                _ => throw new NotImplementedException(),
+            };
 
-        internal AllowedGameState GetBoardState()
+            static string IToStr(int index) => new string(new char[] { (char)((index % 8) + 'a'), (char)((index / 8) + '1') });
+        }
+
+        public AllowedGameState GetBoardState()
         {
             throw new NotImplementedException();
         }
 
-        internal List<string> GetLegalMoves()
+        public List<string> GetLegalMoves()
         {
+            // Check Cache
+            List<string> cached_LegalMoves = Cache.LegalMoves;
+            if (cached_LegalMoves != null)
+                return cached_LegalMoves;
+
             List<string> moves = new List<string>();
 
             // Find each figure
@@ -134,19 +162,67 @@ namespace ChEngine
                 }
             }
 
+            // Store cache
+            Cache.LegalMoves = moves;
+
             return moves;
         }
 
         private void AddPawnlikeMoves(List<string> moves, int i)
         {
-            // if not on baseline anymore, can go one up if free
             int rowNum = i / 8;
             if (Fields[i].IsWhite)
             {
-                // Can not jump anymore
-                if (rowNum > 1)
+                switch (rowNum)
                 {
-                    // can go straight
+                    case 6:
+                        // can promote
+
+                        break;
+
+                    case 1:
+                        // can jump one if free
+                        if (Fields[i + 8].Type == FigureType.EMPTY)
+                        {
+                            moves.Add(GetUCI(i, i + 8, MoveType.Move));
+
+                            // can jump 2 times
+                            // but only of both fields are free
+                            if (Fields[i + 2 * 8].Type == FigureType.EMPTY)
+                                moves.Add(GetUCI(i, i + 2 * 8, MoveType.Move));
+                        }
+                        break;
+
+                    default:
+                        // can go one up if free
+                        if (Fields[i + 8].Type == FigureType.EMPTY)
+                            moves.Add(GetUCI(i, i + 8, MoveType.Move));
+                        break;
+                }
+
+                // Can take diagonally left
+                int colNum = i % 8;
+                if (colNum > 0)
+                {
+                    int dest = i - 1 + 1 * 8;
+                    if (
+                        (Fields[dest].Type != FigureType.EMPTY)
+                        &&
+                        (Fields[dest].IsWhite != IsWhiteToMove)
+                    )
+                        moves.Add(GetUCI(i, dest, MoveType.Take));
+                }
+
+                // and right
+                if (colNum < 7)
+                {
+                    int dest = i + 1 + 1 * 8;
+                    if (
+                        (Fields[dest].Type != FigureType.EMPTY)
+                        &&
+                        (Fields[dest].IsWhite != IsWhiteToMove)
+                    )
+                        moves.Add(GetUCI(i, dest, MoveType.Take));
                 }
             }
         }
@@ -165,11 +241,44 @@ namespace ChEngine
                 new Point(-1, 1),
             };
 
+            // Check bounds
+            int colNumber = i % 8;
+            int rowNumber = i / 8;
+            // check to right / left
+            switch (colNumber)
+            {
+                case 0:
+                    // remove all possibilites that go left
+                    vectors.RemoveAll(x => x.X < 0);
+                    break;
+                case 7:
+                    // remove all possibilites that go right 
+                    vectors.RemoveAll(x => x.X > 2);
+                    break;
+                default:
+                    break;
+            }
+
+            // check to top / bottom
+            switch (rowNumber)
+            {
+                case 0:
+                    // remove all possibilites that go bottom
+                    vectors.RemoveAll(x => x.Y < 0);
+                    break;
+                case 7:
+                    // remove all possibilites that go top 
+                    vectors.RemoveAll(x => x.Y > 0);
+                    break;
+                default:
+                    break;
+            }
+
             // iterate over each
             foreach (var vec in vectors)
             {
                 int index = i + vec.X + vec.Y * 8;
-                AddIfEmptyOrEnemy(moves, index);
+                AddIfEmptyOrEnemy(moves, i, index);
             }
         }
 
@@ -240,19 +349,16 @@ namespace ChEngine
             foreach (var vec in vectors)
             {
                 int index = i + vec.X + vec.Y * 8;
-                AddIfEmptyOrEnemy(moves, index);
+                AddIfEmptyOrEnemy(moves, i, index);
             }
         }
 
-        private readonly void AddIfEmptyOrEnemy(List<string> moves, int index)
+        private void AddIfEmptyOrEnemy(List<string> moves, int from, int to)
         {
-            if ((Fields[index].Type == FigureType.EMPTY)
-                ||
-                (Fields[index].IsWhite ^ IsWhiteToMove)
-                )
-            {
-                moves.Add(GetUIC(index));
-            }
+            if (Fields[to].Type == FigureType.EMPTY)
+                moves.Add(GetUCI(from, to, MoveType.Move));
+            else if (Fields[to].IsWhite ^ IsWhiteToMove)
+                moves.Add(GetUCI(from, to, MoveType.Take));
         }
 
         private void AddBishoplikeMoves(List<string> moves, int i)
@@ -274,12 +380,12 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(GetUIC(index));
+                        moves.Add(GetUCI(i, index, MoveType.Take));
 
                     break;
                 }
 
-                moves.Add(GetUIC(index));
+                moves.Add(GetUCI(i, index, MoveType.Move));
             }
 
             // Go left and up until you hit something
@@ -291,12 +397,12 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(GetUIC(index));
+                        moves.Add(GetUCI(i, index, MoveType.Take));
 
                     break;
                 }
 
-                moves.Add(GetUIC(index));
+                moves.Add(GetUCI(i, index, MoveType.Move));
             }
 
             // Go left and down until you hit something
@@ -308,12 +414,12 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(GetUIC(index));
+                        moves.Add(GetUCI(i, index, MoveType.Take));
 
                     break;
                 }
 
-                moves.Add(GetUIC(index));
+                moves.Add(GetUCI(i, index, MoveType.Move));
             }
 
             // Go right and down until you hit something
@@ -325,16 +431,16 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(GetUIC(index));
+                        moves.Add(GetUCI(i, index, MoveType.Take));
 
                     break;
                 }
 
-                moves.Add(GetUIC(index));
+                moves.Add(GetUCI(i, index, MoveType.Move));
             }
         }
 
-        private readonly void AddRooklikeMoves(List<string> moves, int i)
+        private void AddRooklikeMoves(List<string> moves, int i)
         {
             // Store some vars
             int colNum = i % 8;
@@ -350,12 +456,12 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(GetUIC(colI));
+                        moves.Add(GetUCI(i, index, MoveType.Take));
 
                     break;
                 }
 
-                moves.Add(GetUIC(colI));
+                moves.Add(GetUCI(i, index, MoveType.Move));
             }
 
             // Go left until you hit something
@@ -366,12 +472,12 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(GetUIC(colI));
+                        moves.Add(GetUCI(i, index, MoveType.Take));
 
                     break;
                 }
 
-                moves.Add(GetUIC(colI));
+                moves.Add(GetUCI(i, index, MoveType.Move));
             }
 
             // Go up until you hit something
@@ -382,12 +488,12 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(GetUIC(rowI));
+                        moves.Add(GetUCI(i, index, MoveType.Take));
 
                     break;
                 }
 
-                moves.Add(GetUIC(rowI));
+                moves.Add(GetUCI(i, index, MoveType.Move));
             }
 
             // go down until you hit something
@@ -398,21 +504,29 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(GetUIC(rowI));
+                        moves.Add(GetUCI(i, index, MoveType.Take));
 
                     break;
                 }
 
-                moves.Add(GetUIC(rowI));
+                moves.Add(GetUCI(i, index, MoveType.Move));
             }
         }
 
-        internal double Evaluate()
+        public double Evaluate()
         {
+            // Check cache
+            if (Cache.Evaluation != null)
+                return Cache.Evaluation.Value;
+
             // simply count pieces
             double score = 0;
             for (int i = 0; i < 8 * 8; i++)
                 score += Weighting(Fields[i].Type) * (Fields[i].IsWhite ? 1 : -1);
+
+
+            // store cache
+            Cache.Evaluation = score;
 
             return score;
         }
@@ -433,9 +547,27 @@ namespace ChEngine
         }
     }
 
+    public enum MoveType
+    {
+        Move,
+        Take,
+        PromoteKnight,
+        PromoteBishop,
+        PromoteRook,
+        PromoteQueen,
+        CastleKingside,
+        CastleQueenside,
+    }
+
     public class Cache
     {
         public List<string> LegalMoves { get; set; }
         public double? Evaluation { get; set; }
+
+        public void Clear()
+        {
+            LegalMoves = null;
+            Evaluation = null;
+        }
     }
 }
