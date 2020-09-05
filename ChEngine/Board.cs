@@ -2,87 +2,116 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
+using System.Linq;
 using System.Reflection.Metadata.Ecma335;
 using System.Runtime.CompilerServices;
 
 namespace ChEngine
 {
-    public enum AllowedGameState
+    public class Board : ICloneable
     {
-        Normal,
-        Check,
-        Checkmate
-    }
-
-    public struct Board
-    {
-        public Figure[] Fields;
+        public Field[] Fields;
         public bool IsWhiteToMove;
-        public readonly Cache Cache;
+        public readonly Cache Cache = new Cache();
 
-        public Board(string moves)
+        public static readonly Field[] DefaultField = CreateDefaultField();
+
+        private static Field[] CreateDefaultField()
         {
-            Fields = new Figure[8 * 8];
-            Cache = new Cache();
+            var result = new Field[8 * 8];
 
             // Standard config: pawns
             for (int i = 8; i < 8 + 8; i++)
             {
-                Fields[i] = new Figure(true, FigureType.Pawn);
-                Fields[i + 5 * 8] = new Figure(false, FigureType.Pawn);
+                result[i] = new Field(true, FigureType.Pawn);
+                result[i + 5 * 8] = new Field(false, FigureType.Pawn);
             }
 
             const int sevenRows = 7 * 8;
 
             // standard config: pieces
-            Fields[0] = new Figure(true, FigureType.Rook);
-            Fields[0 + sevenRows] = new Figure(false, FigureType.Rook);
+            result[0] = new Field(true, FigureType.Rook);
+            result[0 + sevenRows] = new Field(false, FigureType.Rook);
 
-            Fields[1] = new Figure(true, FigureType.Knight);
-            Fields[1 + sevenRows] = new Figure(false, FigureType.Knight);
+            result[1] = new Field(true, FigureType.Knight);
+            result[1 + sevenRows] = new Field(false, FigureType.Knight);
 
-            Fields[2] = new Figure(true, FigureType.Bishop);
-            Fields[2 + sevenRows] = new Figure(false, FigureType.Bishop);
+            result[2] = new Field(true, FigureType.Bishop);
+            result[2 + sevenRows] = new Field(false, FigureType.Bishop);
 
-            Fields[3] = new Figure(true, FigureType.Queen);
-            Fields[3 + sevenRows] = new Figure(false, FigureType.Queen);
+            result[3] = new Field(true, FigureType.Queen);
+            result[3 + sevenRows] = new Field(false, FigureType.Queen);
 
-            Fields[4] = new Figure(true, FigureType.King);
-            Fields[4 + sevenRows] = new Figure(false, FigureType.King);
+            result[4] = new Field(true, FigureType.King);
+            result[4 + sevenRows] = new Field(false, FigureType.King);
 
-            Fields[5] = new Figure(true, FigureType.Bishop);
-            Fields[5 + sevenRows] = new Figure(false, FigureType.Bishop);
+            result[5] = new Field(true, FigureType.Bishop);
+            result[5 + sevenRows] = new Field(false, FigureType.Bishop);
 
-            Fields[6] = new Figure(true, FigureType.Knight);
-            Fields[6 + sevenRows] = new Figure(false, FigureType.Knight);
+            result[6] = new Field(true, FigureType.Knight);
+            result[6 + sevenRows] = new Field(false, FigureType.Knight);
 
-            Fields[7] = new Figure(true, FigureType.Rook);
-            Fields[7 + sevenRows] = new Figure(false, FigureType.Rook);
+            result[7] = new Field(true, FigureType.Rook);
+            result[7 + sevenRows] = new Field(false, FigureType.Rook);
+
+            return result;
+        }
+
+        private Board()
+        { }
+
+        public Board(string moves)
+        {
+            Fields = (Field[])DefaultField.Clone();
+            IsWhiteToMove = true;
 
             // Apply all mutations
             string[] movesSplitted = moves.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            IsWhiteToMove = movesSplitted.Length % 2 == 0;
             foreach (var move in movesSplitted)
                 Mutate(move);
         }
 
+        public object Clone()
+        {
+            return new Board()
+            {
+                Fields = (Field[])Fields.Clone(),
+                IsWhiteToMove = IsWhiteToMove
+            };
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is Board b)
+                return Enumerable.SequenceEqual(b.Fields, Fields) && (b.IsWhiteToMove && IsWhiteToMove);
+
+            return false;
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(
+                IsWhiteToMove,
+                Enumerable.Aggregate(Fields, 0, (last, next) => HashCode.Combine(
+                    last,
+                    next.GetHashCode()
+                )));
+        }
+
+
         internal void Mutate(string move)
         {
-            string from = move.Substring(0, 2);
-            string to = move.Substring(2, 2);
-
             // Pick piece
-            int fromIndex = GetIndex(from);
-            Figure figureFrom = Fields[fromIndex];
+            Move parsedMove = ParseMove(move);
+            Field figureFrom = Fields[parsedMove.From];
+
 
             // remove from
-            Fields[fromIndex].Type = FigureType.EMPTY;
+            Fields[parsedMove.From].Figure = FigureType.EMPTY;
 
             // Check destination
-            int toIndex = GetIndex(to);
-            Figure figureTo = Fields[toIndex];
-
-            Fields[toIndex] = figureFrom;
+            Field figureTo = Fields[parsedMove.To];
+            Fields[parsedMove.To] = figureFrom;
 
             // Flip who is to move
             IsWhiteToMove = !IsWhiteToMove;
@@ -91,7 +120,31 @@ namespace ChEngine
             Cache.Clear();
         }
 
-        public static int GetIndex(string from) => (from[0] - 'a') + 8 * (from[1] - '1');
+        public static Move ParseMove(string uic)
+        {
+            // check format
+            if (uic.Length == 4)
+                return new Move((uic[0] - 'a') + 8 * (uic[1] - '1'), (uic[2] - 'a') + 8 * (uic[3] - '1'), MoveType.Move);
+
+            if (uic.Length == 5)
+            {
+                if (uic[2] == 'x')
+                    return new Move((uic[0] - 'a') + 8 * (uic[1] - '1'), (uic[3] - 'a') + 8 * (uic[4] - '1'), MoveType.Take);
+
+                MoveType moveType = uic[4] switch
+                {
+                    'Q' => MoveType.PromoteQueen,
+                    'R' => MoveType.PromoteRook,
+                    'N' => MoveType.PromoteKnight,
+                    'B' => MoveType.PromoteBishop,
+                    _ => throw new ArgumentException("Cannot understand promotion char " + uic[4])
+                };
+
+                return new Move((uic[0] - 'a') + 8 * (uic[1] - '1'), (uic[2] - 'a') + 8 * (uic[3] - '1'), moveType);
+            }
+
+            throw new ArgumentException("uic has wrong length of " + uic.Length);
+        }
 
         public static string GetUCI(int from, int to, MoveType type)
         {
@@ -99,42 +152,53 @@ namespace ChEngine
             {
                 MoveType.Move => IToStr(from) + IToStr(to),
                 MoveType.Take => IToStr(from) + 'x' + IToStr(to),
+                MoveType.CastleKingside => "0-0",
+                MoveType.CastleQueenside => "0-0-0",
                 MoveType.PromoteKnight => IToStr(from) + IToStr(to) + "N",
                 MoveType.PromoteBishop => IToStr(from) + IToStr(to) + "B",
                 MoveType.PromoteRook => IToStr(from) + IToStr(to) + "R",
                 MoveType.PromoteQueen => IToStr(from) + IToStr(to) + "Q",
-                MoveType.CastleKingside => "0-0",
-                MoveType.CastleQueenside => "0-0-0",
                 _ => throw new NotImplementedException(),
             };
 
             static string IToStr(int index) => new string(new char[] { (char)((index % 8) + 'a'), (char)((index / 8) + '1') });
         }
 
-        public AllowedGameState GetBoardState()
+        public GameState GetBoardState()
         {
-            throw new NotImplementedException();
+            // Check Cache
+            if (Cache.BoardState != null)
+                return Cache.BoardState.Value;
+
+            GameState result = default;
+
+            if (GetLegalMoves().Count == 0)
+                result = GameState.Checkmate;
+
+            // Store cache
+            Cache.BoardState = result;
+
+            return result;
         }
 
         public List<string> GetLegalMoves()
         {
             // Check Cache
-            List<string> cached_LegalMoves = Cache.LegalMoves;
-            if (cached_LegalMoves != null)
-                return cached_LegalMoves;
+            if (Cache.LegalMoves != null)
+                return Cache.LegalMoves;
 
             List<string> moves = new List<string>();
 
             // Find each figure
             for (int i = 0; i < 8 * 8; i++)
             {
-                Figure f = Fields[i];
+                Field f = Fields[i];
 
                 // XOR is same as saying that the color is not who is to move
                 if (f.IsWhite ^ IsWhiteToMove)
                     continue;
 
-                switch (f.Type)
+                switch (f.Figure)
                 {
                     case FigureType.EMPTY:
                         break;
@@ -182,20 +246,20 @@ namespace ChEngine
 
                     case 1:
                         // can jump one if free
-                        if (Fields[i + 8].Type == FigureType.EMPTY)
+                        if (Fields[i + 8].Figure == FigureType.EMPTY)
                         {
                             moves.Add(GetUCI(i, i + 8, MoveType.Move));
 
                             // can jump 2 times
                             // but only of both fields are free
-                            if (Fields[i + 2 * 8].Type == FigureType.EMPTY)
+                            if (Fields[i + 2 * 8].Figure == FigureType.EMPTY)
                                 moves.Add(GetUCI(i, i + 2 * 8, MoveType.Move));
                         }
                         break;
 
                     default:
                         // can go one up if free
-                        if (Fields[i + 8].Type == FigureType.EMPTY)
+                        if (Fields[i + 8].Figure == FigureType.EMPTY)
                             moves.Add(GetUCI(i, i + 8, MoveType.Move));
                         break;
                 }
@@ -206,7 +270,7 @@ namespace ChEngine
                 {
                     int dest = i - 1 + 1 * 8;
                     if (
-                        (Fields[dest].Type != FigureType.EMPTY)
+                        (Fields[dest].Figure != FigureType.EMPTY)
                         &&
                         (Fields[dest].IsWhite != IsWhiteToMove)
                     )
@@ -218,7 +282,7 @@ namespace ChEngine
                 {
                     int dest = i + 1 + 1 * 8;
                     if (
-                        (Fields[dest].Type != FigureType.EMPTY)
+                        (Fields[dest].Figure != FigureType.EMPTY)
                         &&
                         (Fields[dest].IsWhite != IsWhiteToMove)
                     )
@@ -253,7 +317,7 @@ namespace ChEngine
                     break;
                 case 7:
                     // remove all possibilites that go right 
-                    vectors.RemoveAll(x => x.X > 2);
+                    vectors.RemoveAll(x => x.X > 0);
                     break;
                 default:
                     break;
@@ -316,7 +380,7 @@ namespace ChEngine
                     break;
                 case 7:
                     // remove all possibilites that go right at all 
-                    vectors.RemoveAll(x => x.X > 2);
+                    vectors.RemoveAll(x => x.X > 0);
                     break;
                 default:
                     break;
@@ -355,7 +419,7 @@ namespace ChEngine
 
         private void AddIfEmptyOrEnemy(List<string> moves, int from, int to)
         {
-            if (Fields[to].Type == FigureType.EMPTY)
+            if (Fields[to].Figure == FigureType.EMPTY)
                 moves.Add(GetUCI(from, to, MoveType.Move));
             else if (Fields[to].IsWhite ^ IsWhiteToMove)
                 moves.Add(GetUCI(from, to, MoveType.Take));
@@ -376,7 +440,7 @@ namespace ChEngine
             for (int times = 0; times < Math.Min(columnsToRight, rowsToTop); times++)
             {
                 index += 8 + 1;
-                if (Fields[index].Type != FigureType.EMPTY)
+                if (Fields[index].Figure != FigureType.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
@@ -393,7 +457,7 @@ namespace ChEngine
             for (int times = 0; times < Math.Min(colNum, rowsToTop); times++)
             {
                 index += 8 - 1;
-                if (Fields[index].Type != FigureType.EMPTY)
+                if (Fields[index].Figure != FigureType.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
@@ -410,7 +474,7 @@ namespace ChEngine
             for (int times = 0; times < Math.Min(colNum, rowNum); times++)
             {
                 index += -8 - 1;
-                if (Fields[index].Type != FigureType.EMPTY)
+                if (Fields[index].Figure != FigureType.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
@@ -427,7 +491,7 @@ namespace ChEngine
             for (int times = 0; times < Math.Min(columnsToRight, rowNum); times++)
             {
                 index += -8 + 1;
-                if (Fields[index].Type != FigureType.EMPTY)
+                if (Fields[index].Figure != FigureType.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
@@ -452,7 +516,7 @@ namespace ChEngine
             for (int colI = columnOffset + 1; colI < 8; colI++)
             {
                 int index = colI + rowOffset;
-                if (Fields[index].Type != FigureType.EMPTY)
+                if (Fields[index].Figure != FigureType.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
@@ -468,7 +532,7 @@ namespace ChEngine
             for (int colI = columnOffset - 1; colI >= 0; colI--)
             {
                 int index = colI + rowOffset;
-                if (Fields[index].Type != FigureType.EMPTY)
+                if (Fields[index].Figure != FigureType.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
@@ -484,7 +548,7 @@ namespace ChEngine
             for (int rowI = rowNum + 1; rowI < 8; rowI++)
             {
                 int index = columnOffset + rowI * 8;
-                if (Fields[index].Type != FigureType.EMPTY)
+                if (Fields[index].Figure != FigureType.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
@@ -500,7 +564,7 @@ namespace ChEngine
             for (int rowI = rowNum - 1; rowI >= 0; rowI--)
             {
                 int index = columnOffset + rowI * 8;
-                if (Fields[index].Type != FigureType.EMPTY)
+                if (Fields[index].Figure != FigureType.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
@@ -513,7 +577,7 @@ namespace ChEngine
             }
         }
 
-        public double Evaluate()
+        public double GetEvaluation()
         {
             // Check cache
             if (Cache.Evaluation != null)
@@ -522,7 +586,7 @@ namespace ChEngine
             // simply count pieces
             double score = 0;
             for (int i = 0; i < 8 * 8; i++)
-                score += Weighting(Fields[i].Type) * (Fields[i].IsWhite ? 1 : -1);
+                score += Weighting(Fields[i].Figure) * (Fields[i].IsWhite ? 1 : -1);
 
 
             // store cache
@@ -549,25 +613,50 @@ namespace ChEngine
 
     public enum MoveType
     {
-        Move,
+        Move = 0,
         Take,
-        PromoteKnight,
-        PromoteBishop,
-        PromoteRook,
-        PromoteQueen,
         CastleKingside,
         CastleQueenside,
+        PromoteKnight = 'N',
+        PromoteBishop = 'B',
+        PromoteRook = 'R',
+        PromoteQueen = 'Q',
     }
+
+    public enum GameState
+    {
+        NDEF,
+        Normal,
+        Check,
+        Checkmate
+    }
+
+    public struct Move
+    {
+        public int From;
+        public int To;
+        public MoveType MoveType;
+
+        public Move(int from, int to, MoveType moveType)
+        {
+            From = from;
+            To = to;
+            MoveType = moveType;
+        }
+    }
+
 
     public class Cache
     {
         public List<string> LegalMoves { get; set; }
         public double? Evaluation { get; set; }
+        public GameState? BoardState { get; set; }
 
         public void Clear()
         {
             LegalMoves = null;
             Evaluation = null;
+            BoardState = null;
         }
     }
 }

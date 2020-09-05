@@ -13,21 +13,22 @@ namespace ChEngine
 
         private CancellationTokenSource cancellationTokenSource;
 
-        public Engine(string beginMoves)
+        public Engine(bool isWhite)
         {
-            IsWhite = beginMoves.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length % 2 == 1;
+            IsWhite = isWhite;
         }
 
         public string ReactToMove(string moves)
         {
             var newBoard = new Board(moves);
 
-            double bestScore = double.MaxValue + -1;
+            double bestScore = -double.MaxValue;
             string bestMove;
 
             // Make a move within the next 3 seconds
             cancellationTokenSource = new CancellationTokenSource();
-            cancellationTokenSource.CancelAfter(3000);
+            //cancellationTokenSource.CancelAfter(3000);
+            cancellationTokenSource.Cancel();
 
             List<string> myMoves = newBoard.GetLegalMoves();
 
@@ -37,7 +38,7 @@ namespace ChEngine
 
             foreach (var myMove in myMoves)
             {
-                double score = EvaluateContinuation(newBoard, myMove);
+                double score = EvaluateContinuation(ref newBoard, myMove);
 
                 lock (mutex)
                 {
@@ -58,21 +59,24 @@ namespace ChEngine
         /// <param name="board">Board to start from</param>
         /// <param name="move">Move to apply</param>
         /// <returns>Number that is better the higher it is</returns>
-        private double EvaluateContinuation(Board board, string move)
+        private double EvaluateContinuation(ref Board board, string move)
         {
-            board.Mutate(move);
+            // make a copy to not change to ref
+            Board branchMyMove = (Board)board.Clone();
+            branchMyMove.Mutate(move);
 
             // check each legal move for enemy 
-            foreach (var enemyMove in board.GetLegalMoves())
+            foreach (var enemyMove in branchMyMove.GetLegalMoves())
             {
-                Board copy = board;
-                copy.Mutate(enemyMove);
+                // Make another copy to check the enemyMove
+                Board branchEnemyMove = (Board)branchMyMove.Clone();
+                branchEnemyMove.Mutate(enemyMove);
 
-                var legalMoves = copy.GetLegalMoves();
+                var legalMoves = branchEnemyMove.GetLegalMoves();
 
                 if (legalMoves.Count == 0)
                 {
-                    if (copy.GetBoardState() == AllowedGameState.Checkmate)
+                    if (branchEnemyMove.GetBoardState() == GameState.Checkmate)
                         // Enemy checkmates me
                         return double.MaxValue * -1;
                     else
@@ -81,14 +85,14 @@ namespace ChEngine
 
                 // if there is no more time left, just evaluate and break the recursion
                 if (cancellationTokenSource.IsCancellationRequested)
-                    return copy.Evaluate();
+                    return branchEnemyMove.GetEvaluation();
 
                 // else go in recursion
                 // this continuation is only as good as the worst recursive evalúation
                 double worstScore = double.MaxValue;
                 foreach (var myMove in legalMoves)
                 {
-                    double score = EvaluateContinuation(copy, myMove);
+                    double score = EvaluateContinuation(ref branchEnemyMove, myMove);
                     if (Sign(score) < worstScore)
                         worstScore = Sign(score);
                 }

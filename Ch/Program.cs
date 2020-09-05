@@ -20,23 +20,33 @@ namespace Ch
             Console.WriteLine("Setting up connection...");
             Console.WriteLine($"Logged in as \"{lichess.GetUsername()}\"");
 
+            string gameId;
+
             Console.WriteLine("Checking running games...");
-            foreach (var runningGame in lichess.GetGameIds())
+            List<string> runningGames = lichess.GetGameIds();
+            if (runningGames.Count == 0)
             {
-                lichess.Resign(runningGame);
-                Console.WriteLine($"Resigned \"{runningGame}\"");
+                Console.WriteLine("Waiting you to invite me to a game..");
+
+                string challengeId = WaitForFirst(() => lichess.GetChallenges());
+                Console.WriteLine($"Taking challenge: \"{challengeId}\"");
+
+                lichess.Accept(challengeId);
+
+                gameId = WaitForFirst(() => lichess.GetGameIds());
+            }
+            else
+            {
+                gameId = runningGames.First();
+
+                foreach (var runningGame in runningGames.Skip(1))
+                {
+                    lichess.Resign(runningGame);
+                    Console.WriteLine($"Resigned \"{runningGame}\"");
+                }
             }
 
-            Console.WriteLine("Waiting you to invite me to a game..");
-
-            string challengeId = WaitForFirst(() => lichess.GetChallenges());
-            Console.WriteLine($"Taking challenge: \"{challengeId}\"");
-
-            lichess.Accept(challengeId);
-
-            string gameId = WaitForFirst(() => lichess.GetGameIds());
             Console.WriteLine($"Taking game: \"{gameId}\"");
-
             lichess.BeginGameListen(gameId);
 
             GameStartEvent gameStart = new GameStartEvent(WaitForFirst(() => lichess.GetGameEvents()));
@@ -55,7 +65,7 @@ namespace Ch
                     break;
 
                 if (ev.type == "gameState")
-                    bot.MakeMove(ev.moves);
+                    bot.OnNewMove(ev.moves);
             }
         }
 

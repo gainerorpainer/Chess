@@ -4,15 +4,15 @@ using System.Text;
 
 namespace ChEngine
 {
-    public struct Figure
+    public struct Field
     {
         public bool IsWhite;
-        public FigureType Type;
+        public FigureType Figure;
 
-        public Figure(bool isWhite, FigureType type)
+        public Field(bool isWhite, FigureType type)
         {
             IsWhite = isWhite;
-            Type = type;
+            Figure = type;
         }
     }
 

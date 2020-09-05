@@ -11,12 +11,20 @@ namespace Ch.LichessTypes
         public Player black { get; set; }
         public string moves { get; set; }
         public string status { get; set; }
+        public GameState state { get; set; }
+    }
+
+    class GameState
+    {
+        public string type { get; set; }
+        public string moves { get; set; }
     }
 
     class GameStartEvent
     {
         public Player white { get; private set; }
         public Player black { get; private set; }
+        public GameState state { get; private set; }
 
         public GameStartEvent(GameEvent ev)
         {
@@ -25,6 +33,7 @@ namespace Ch.LichessTypes
 
             white = ev.white;
             black = ev.black;
+            state = ev.state;
         }
     }
 }

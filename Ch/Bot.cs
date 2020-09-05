@@ -10,22 +10,31 @@ namespace Ch
     {
         public Action<string> MoveAction { get; set; }
         public Engine Engine { get; set; }
+        public bool IsWhite { get; set; }
+        public int MovesDone { get; set; } = 1;
 
         public Bot(GameStartEvent gamestartevent, Action<string> moveAction)
         {
             MoveAction = moveAction;
 
             // check who is first
-            Engine = new Engine("");
-            if (gamestartevent.white.id == "lorenzobot")
-            {
-                MoveAction(Engine.ReactToMove(""));
-            }
+            IsWhite = gamestartevent.white.id == "lorenzobot";
+            Engine = new Engine(IsWhite);
+
+            OnNewMove(gamestartevent.state.moves);
         }
 
-        public void MakeMove(string moves)
+        private static bool GetWhiteToMove(string moves) => moves.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length % 2 == 0;
+
+        /// <summary>
+        /// Triggers the engine to consider
+        /// You may call this function even if there are no new moves!
+        /// </summary>
+        /// <param name="moves">Moves space separated</param>
+        public void OnNewMove(string moves)
         {
-            MoveAction(Engine.ReactToMove(moves));
+            if (IsWhite == GetWhiteToMove(moves))
+                MoveAction(Engine.ReactToMove(moves));
         }
     }
 }

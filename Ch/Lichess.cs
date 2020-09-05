@@ -117,7 +117,10 @@ namespace Ch
                 line = reader.ReadLine();
 
                 if (line?.Length > 0)
+                {
+                    Console.WriteLine(line);
                     target.Enqueue(JsonConvert.DeserializeObject<T>(line));
+                }
             }
         }
 
