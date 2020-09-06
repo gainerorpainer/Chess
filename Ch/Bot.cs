@@ -10,13 +10,15 @@ namespace Ch
     class Bot
     {
         public Action<Move> MoveAction { get; set; }
+        public Action<string> ReportAction { get; set; }
         public Engine Engine { get; set; }
         public bool IsWhite { get; set; }
         public int MovesDone { get; set; } = 1;
 
-        public Bot(GameStartEvent gamestartevent, Action<Move> moveAction)
+        public Bot(GameStartEvent gamestartevent, Action<Move> moveAction, Action<string> reportAction)
         {
             MoveAction = moveAction;
+            ReportAction = reportAction;
 
             // check who is first
             IsWhite = gamestartevent.white.id == "lorenzobot";
@@ -36,8 +38,9 @@ namespace Ch
         {
             if (IsWhite == GetWhiteToMove(moves))
             {
-                IEnumerable<Move> movesParsed = moves.Split(' ').Select(x => UCINotation.ParseMove(x));
+                IEnumerable<Move> movesParsed = moves.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(x => UCINotation.ParseMove(x));
                 Move bestMove = Engine.ReactToMove(movesParsed);
+                ReportAction($"Depth={Engine.Statistics.MaxDepth}, Nodes={Engine.Statistics.NodesVisited}");
                 MoveAction(bestMove);
             }
 

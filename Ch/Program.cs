@@ -54,7 +54,9 @@ namespace Ch
             lichess.Chat(gameId, "Hello from LorenzoBot");
 
             // load engine
-            Bot bot = new Bot(gameStart, (move) => lichess.Move(gameId, new ChEngine.UCINotation(move)));
+            Bot bot = new Bot(gameStart,
+                (move) => lichess.Move(gameId, new ChEngine.UCINotation(move)),
+                (log) => lichess.Chat(gameId, log));
 
             // until game end, see if i need to move
             while (true)

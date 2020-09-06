@@ -3,13 +3,15 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace ChEngine
 {
     public class Engine
     {
-        //public event EventHandler<string> MoveDecided;
         public bool IsWhite { get; set; }
+
+        public EngineStatistics Statistics => InterlockedEngineStats.Statistics;
 
         private CancellationTokenSource cancellationTokenSource;
 
@@ -27,18 +29,22 @@ namespace ChEngine
 
             // Make a move within the next 3 seconds
             cancellationTokenSource = new CancellationTokenSource();
-            //cancellationTokenSource.CancelAfter(3000);
-            cancellationTokenSource.Cancel();
+            cancellationTokenSource.CancelAfter(3000);
+            //cancellationTokenSource.Cancel();
+
+            // Stats object
+            InterlockedEngineStats.Reset();
 
             List<Move> myMoves = newBoard.GetLegalMoves();
-            
+
             // There must be at least one move, otherwise this would already be checkmate!
             bestMove = myMoves.First();
             object mutex = new object();
 
-            foreach (var myMove in myMoves)
+            Parallel.ForEach(myMoves, myMove =>
             {
-                double score = EvaluateContinuation(ref newBoard, myMove);
+
+                double score = EvaluateContinuation(ref newBoard, myMove, 1);
 
                 lock (mutex)
                 {
@@ -49,6 +55,7 @@ namespace ChEngine
                     }
                 }
             }
+            );
 
             return bestMove;
         }
@@ -59,8 +66,15 @@ namespace ChEngine
         /// <param name="board">Board to start from</param>
         /// <param name="move">Move to apply</param>
         /// <returns>Number that is better the higher it is</returns>
-        private double EvaluateContinuation(ref Board board, Move move)
+        private double EvaluateContinuation(ref Board board, Move move, int depth)
         {
+            // if there is no more time left, just evaluate and break the recursion
+            if (cancellationTokenSource.IsCancellationRequested)
+                return board.GetEvaluation();
+
+            InterlockedEngineStats.Increment_NodesVisited();
+            InterlockedEngineStats.Update_MaxDepth(depth);
+
             // make a copy to not change to ref
             Board branchMyMove = (Board)board.Clone();
             branchMyMove.Mutate(move);
@@ -83,19 +97,20 @@ namespace ChEngine
                         throw new NotImplementedException();
                 }
 
-                // if there is no more time left, just evaluate and break the recursion
-                if (cancellationTokenSource.IsCancellationRequested)
-                    return branchEnemyMove.GetEvaluation();
-
-                // else go in recursion
-                // this continuation is only as good as the worst recursive evalúation
+                // go in recursion
+                // this continuation is only as good as the worst recursive evaluation
                 double worstScore = double.MaxValue;
-                foreach (var myMove in legalMoves)
+                object mutex = new object();
+                Parallel.ForEach(legalMoves, myMove =>
                 {
-                    double score = EvaluateContinuation(ref branchEnemyMove, myMove);
-                    if (Sign(score) < worstScore)
-                        worstScore = Sign(score);
+                    double score = EvaluateContinuation(ref branchEnemyMove, myMove, depth + 1);
+                    lock (mutex)
+                    {
+                        if (Sign(score) < worstScore)
+                            worstScore = Sign(score);
+                    }
                 }
+                );
 
                 return Sign(worstScore);
             }
