@@ -12,7 +12,7 @@ namespace TestCh
         [TestMethod]
         public void TestValueSemantics()
         {
-            Board original = new Board("");
+            Board original = new Board(Enumerable.Empty<Move>());
             Board copy = original;
 
             Assert.AreSame(original, copy);
@@ -34,18 +34,8 @@ namespace TestCh
         [TestMethod]
         public void TestStatics()
         {
-            // GetUIC
-            Assert.AreEqual(Board.GetUCI(0, 8, MoveType.Move), "a1a2");
-            Assert.AreEqual(Board.GetUCI(8 * 8 - 1, 7 * 8 - 1, MoveType.Move), "h8h7");
-            Assert.AreEqual(Board.GetUCI(0, 8, MoveType.Take), "a1xa2");
-            Assert.AreEqual(Board.GetUCI(8 * 8 - 1, 7 * 8 - 1, MoveType.Take), "h8xh7");
-
-            // GetIndex
-            Assert.AreEqual(Board.ParseMove("a1a2"), new Move(0, 8, MoveType.Move));
-            Assert.AreEqual(Board.ParseMove("a1xb2"), new Move(0, 9, MoveType.Take));
-
             // Weighting
-            Board freshBoard = new Board("");
+            Board freshBoard = new Board(Enumerable.Empty<Move>());
             double whiteEvaluation = freshBoard.Fields.Where(x => x.Figure != FigureType.EMPTY && x.IsWhite == true).Sum(x => Board.Weighting(x.Figure));
             double blackEvaluation = freshBoard.Fields.Where(x => x.Figure != FigureType.EMPTY && x.IsWhite == false).Sum(x => Board.Weighting(x.Figure));
             Assert.AreEqual(whiteEvaluation, blackEvaluation);
@@ -84,8 +74,8 @@ namespace TestCh
 
             firstMoves.Sort();
 
-            Board b = new Board("");
-            List<string> boardMoves = b.GetLegalMoves();
+            Board b = new Board(Enumerable.Empty<Move>());
+            List<string> boardMoves = b.GetLegalMoves().Select(x => new UCINotation(x).ToString()).ToList();
 
             boardMoves.Sort();
 

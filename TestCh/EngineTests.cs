@@ -3,6 +3,7 @@ using ChEngine;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
 
 namespace ChEngine.Tests
 {
@@ -12,10 +13,10 @@ namespace ChEngine.Tests
         [TestMethod()]
         public void TestBestMove()
         {
-            Engine eng = new Engine("d2d4");
+            Engine eng = new Engine(true);
             // most likely it's best to take!
-            string reaction = eng.ReactToMove("d2d4 e7e5");
-            Assert.AreEqual(reaction, "d4xe5");
+            Move reaction = eng.ReactToMove(new string[] { "d2d4 e7e5" }.Select(x => UCINotation.ParseMove(x)));
+            Assert.AreEqual(reaction, UCINotation.ParseMove("d4xe5"));
         }
     }
 }

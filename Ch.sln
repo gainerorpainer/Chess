@@ -11,7 +11,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestCh", "TestCh\TestCh.csp
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{46CFE464-3833-47C3-9B42-901857A5F3F4}"
 	ProjectSection(SolutionItems) = preProject
-		UIC_Documentation.txt = UIC_Documentation.txt
+		UCI_Documentation.txt = UCI_Documentation.txt
 	EndProjectSection
 EndProject
 Global

@@ -2,18 +2,19 @@
 using ChEngine;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace Ch
 {
     class Bot
     {
-        public Action<string> MoveAction { get; set; }
+        public Action<Move> MoveAction { get; set; }
         public Engine Engine { get; set; }
         public bool IsWhite { get; set; }
         public int MovesDone { get; set; } = 1;
 
-        public Bot(GameStartEvent gamestartevent, Action<string> moveAction)
+        public Bot(GameStartEvent gamestartevent, Action<Move> moveAction)
         {
             MoveAction = moveAction;
 
@@ -34,7 +35,12 @@ namespace Ch
         public void OnNewMove(string moves)
         {
             if (IsWhite == GetWhiteToMove(moves))
-                MoveAction(Engine.ReactToMove(moves));
+            {
+                IEnumerable<Move> movesParsed = moves.Split(' ').Select(x => UCINotation.ParseMove(x));
+                Move bestMove = Engine.ReactToMove(movesParsed);
+                MoveAction(bestMove);
+            }
+
         }
     }
 }

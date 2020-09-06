@@ -18,20 +18,20 @@ namespace ChEngine
             IsWhite = isWhite;
         }
 
-        public string ReactToMove(string moves)
+        public Move ReactToMove(IEnumerable<Move> moves)
         {
             var newBoard = new Board(moves);
 
             double bestScore = -double.MaxValue;
-            string bestMove;
+            Move bestMove;
 
             // Make a move within the next 3 seconds
             cancellationTokenSource = new CancellationTokenSource();
             //cancellationTokenSource.CancelAfter(3000);
             cancellationTokenSource.Cancel();
 
-            List<string> myMoves = newBoard.GetLegalMoves();
-
+            List<Move> myMoves = newBoard.GetLegalMoves();
+            
             // There must be at least one move, otherwise this would already be checkmate!
             bestMove = myMoves.First();
             object mutex = new object();
@@ -59,7 +59,7 @@ namespace ChEngine
         /// <param name="board">Board to start from</param>
         /// <param name="move">Move to apply</param>
         /// <returns>Number that is better the higher it is</returns>
-        private double EvaluateContinuation(ref Board board, string move)
+        private double EvaluateContinuation(ref Board board, Move move)
         {
             // make a copy to not change to ref
             Board branchMyMove = (Board)board.Clone();

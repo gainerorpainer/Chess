@@ -1,4 +1,5 @@
 ﻿using Ch.LichessTypes;
+using ChEngine;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Concurrent;
@@ -161,9 +162,6 @@ namespace Ch
         public void Accept(string challengeId) => HttpPost($"https://lichess.org/api/challenge/{challengeId}/accept", new StringContent(""));
         public void Resign(string runningGame) => HttpPost($"https://lichess.org/api/bot/game/{runningGame}/resign");
 
-        public void Move(string gameId, string move)
-        {
-            HttpPost($"https://lichess.org/api/bot/game/{gameId}/move/{move}");
-        }
+        public void Move(string gameId, UCINotation move) => HttpPost($"https://lichess.org/api/bot/game/{gameId}/move/{move}");
     }
 }
