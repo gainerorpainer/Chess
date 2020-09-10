@@ -27,8 +27,6 @@ namespace ChEngine
             {
                 TypeOfMove.Move => IndexToUCI(move.From) + IndexToUCI(move.To) + promotionSuffix,
                 TypeOfMove.Take => IndexToUCI(move.From) + IndexToUCI(move.To) + promotionSuffix,
-                TypeOfMove.CastleKingside => "0-0",
-                TypeOfMove.CastleQueenside => "0-0-0",
                 _ => throw new NotImplementedException(),
             };
 

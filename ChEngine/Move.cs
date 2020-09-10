@@ -8,6 +8,8 @@
         public TypeOfMove Type;
         public TypeOfPromotion Promotion;
 
+        public static readonly Move NullMove = new Move(int.MinValue, int.MinValue, TypeOfMove.NullMove);
+
         public Move(int from, int to, TypeOfMove moveType, TypeOfPromotion promotion = TypeOfPromotion.NoPromotion)
         {
             From = from;

@@ -17,13 +17,11 @@ namespace ChEngine
 
         public static void Increment_NodesVisited()
         {
-            // Interlocked.Increment(ref NodesVisited_);
+            Interlocked.Increment(ref NodesVisited_);
         }
 
         public static void Update_MaxDepth(int depth)
         {
-            return;
-
             // check if this is bigger
             while (true)
             {

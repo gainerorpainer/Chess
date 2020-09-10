@@ -28,7 +28,7 @@ namespace ChEngine
         {
             // Make a move within the next 3 seconds
             cancellationTokenSource = new CancellationTokenSource();
-            cancellationTokenSource.CancelAfter(3000);
+            cancellationTokenSource.CancelAfter(5000);
             //cancellationTokenSource.Cancel();
 
             var initialBoard = new Board(moves);
@@ -118,6 +118,9 @@ namespace ChEngine
         /// <returns>Evaluation (pos: white advantage)</returns>
         private double RecursiveEvaluateNode(TreeNode node)
         {
+
+            InterlockedEngineStats.Increment_NodesVisited();
+
             // End of recursion
             if (node.Children.Count == 0)
                 return node.Board.GetEvaluation();

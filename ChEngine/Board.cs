@@ -6,17 +6,19 @@ using System.Drawing;
 using System.Linq;
 using System.Reflection.Metadata.Ecma335;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography.X509Certificates;
 
 namespace ChEngine
 {
     public class Board : ICloneable
     {
         public Field[] Fields;
-        public bool IsWhiteToMove;
         public PlayerOption[] PlayerOptions;
+        public bool IsWhiteToMove;
         public readonly Cache Cache = new Cache();
 
         public static readonly Field[] DefaultField = CreateDefaultField();
+        public static readonly PlayerOption[] DefaultPlayerOptions = new PlayerOption[] { PlayerOption.DefautOption, PlayerOption.DefautOption };
         private static Field[] CreateDefaultField()
         {
             var result = new Field[8 * 8];
@@ -65,7 +67,7 @@ namespace ChEngine
         {
             Fields = (Field[])DefaultField.Clone();
             IsWhiteToMove = true;
-            PlayerOptions = new PlayerOption[2];
+            PlayerOptions = (PlayerOption[])DefaultPlayerOptions.Clone();
 
             // Apply all mutations
             foreach (var move in moves)
@@ -77,8 +79,8 @@ namespace ChEngine
             return new Board()
             {
                 Fields = (Field[])Fields.Clone(),
-                IsWhiteToMove = IsWhiteToMove,
-                PlayerOptions = (PlayerOption[])PlayerOptions.Clone()
+                PlayerOptions = (PlayerOption[])PlayerOptions.Clone(),
+                IsWhiteToMove = IsWhiteToMove
             };
         }
 
@@ -170,17 +172,11 @@ namespace ChEngine
                     // Check destination
                     Field figureTo = Fields[move.To];
                     Fields[move.To] = figureFrom;
-
-                    // Revoke all options for en passant
-                    PlayerOptions[CurrentPlayerId()].ClearEnpassant();
-
-                    // Flip who is to move
-                    IsWhiteToMove = !IsWhiteToMove;
-
-                    // Disvalidate Cache
-                    Cache.Clear();
                     break;
 
+                case TypeOfMove.NullMove:
+                    // Do nothing actually
+                    break;
                 default:
                     throw new NotImplementedException();
             }
@@ -205,6 +201,15 @@ namespace ChEngine
                 default:
                     throw new NotImplementedException();
             }
+
+            // Revoke all options for en passant
+            PlayerOptions[CurrentPlayerId()].ClearEnpassant();
+
+            // Flip who is to move
+            IsWhiteToMove = !IsWhiteToMove;
+
+            // Disvalidate Cache
+            Cache.Clear();
         }
 
 
@@ -220,12 +225,32 @@ namespace ChEngine
 
             List<Move> moves = GetMoves_IgnoreCheckRules().ToList();
 
+            // castling?
+            // check that you are not in check!
+            if (GetInCheck() == false)
+            {
+                int kingPos = 4 + (IsWhiteToMove ? 0 : 7) * 8;
+                if (PlayerOptions[CurrentPlayerId()].KingsideCastle)
+                {
+                    if (CheckTemporaryCastlingCondition(kingPos, towardsKingside: true))
+                        // if you got here, nice!
+                        moves.Add(new Move(4, 4 + 2, TypeOfMove.Move));
+                }
+
+                if (PlayerOptions[CurrentPlayerId()].QueensideCastle)
+                {
+                    if (CheckTemporaryCastlingCondition(kingPos, towardsKingside: false))
+                        // if you got here, nice!
+                        moves.Add(new Move(4, 4 - 2, TypeOfMove.Move));
+                }
+            }
+
             // you are never allowed to make a move which would make it possible for your enemy to take your king on his next move!
             // This automatically includes 'check' and 'pinned pieces' rule
             List<Move> protectKingRule = new List<Move>();
 
             // find your king here
-            int kingLocation = Fields.ToList().FindIndex(x => x.Figure == TypeOfFigure.King && x.IsWhite == IsWhiteToMove);
+            int kingLocation = FindInArray(Fields, x => x.Figure == TypeOfFigure.King && x.IsWhite == IsWhiteToMove);
 
             // todo: maybe easiest is to make a copy for each legal move and see if you can take the king
             foreach (var move in moves)
@@ -312,6 +337,39 @@ namespace ChEngine
                         break;
                 }
             }
+        }
+
+        public bool GetInCheck()
+        {
+            if (Cache.InCheck.HasValue)
+                return Cache.InCheck.Value;
+
+
+            // find your king here
+            int kingLocation = FindInArray(Fields, x => x.Figure == TypeOfFigure.King && x.IsWhite == IsWhiteToMove);
+
+            // make a copy
+            var clone = (Board)Clone();
+
+            // make a null move (to give the other player the move)
+            clone.Mutate(Move.NullMove);
+
+            // Check enemy moves
+            var result = clone.GetMoves_IgnoreCheckRules().Any(x => x.Type == TypeOfMove.Take && x.To == kingLocation);
+
+            // store cache
+            Cache.InCheck = result;
+
+            return result;
+        }
+
+        private int FindInArray<T>(T[] arr, Func<T, bool> predicate)
+        {
+            for (int i = 0; i < arr.Length; i++)
+                if (predicate(arr[i]))
+                    return i;
+
+            return -1;
         }
 
         private IEnumerable<Move> PawnMoves(int i)
@@ -413,7 +471,7 @@ namespace ChEngine
             }
         }
 
-        private IEnumerable<Move> KingMoves(int i)
+        private IEnumerable<Move> KingMoves(int from)
         {
             // There are 8 configurations
             List<Point> vectors = new List<Point>() {
@@ -428,8 +486,8 @@ namespace ChEngine
             };
 
             // Check bounds
-            int colNumber = i % 8;
-            int rowNumber = i / 8;
+            int colNumber = from % 8;
+            int rowNumber = from / 8;
             // check to right / left
             switch (colNumber)
             {
@@ -463,12 +521,12 @@ namespace ChEngine
             // iterate over each
             foreach (var vec in vectors)
             {
-                int index = i + vec.X + (vec.Y * 8);
+                int index = from + vec.X + (vec.Y * 8);
 
                 if (Fields[index].Figure == TypeOfFigure.EMPTY)
-                    yield return new Move(i, index, TypeOfMove.Move);
+                    yield return new Move(from, index, TypeOfMove.Move);
                 else if (Fields[index].IsWhite ^ IsWhiteToMove)
-                    yield return new Move(i, index, TypeOfMove.Take);
+                    yield return new Move(from, index, TypeOfMove.Take);
             }
         }
 
@@ -717,6 +775,36 @@ namespace ChEngine
             return score;
         }
 
+        public bool CheckTemporaryCastlingCondition(int kingPos, bool towardsKingside)
+        {
+            int sign = towardsKingside ? 1 : -1;
+
+            // first of all, all cols to the corner must be free
+            for (int i = 4 + sign; i < 7; i++)
+            {
+                if (Fields[i].Figure != TypeOfFigure.EMPTY)
+                    return false;
+            }
+
+            // each subsequent move must not result in check
+            Board copy = (Board)Clone();
+
+            for (int i = 0; i < 2; i++)
+            {
+                // move the king one square
+                copy.Mutate(new Move(kingPos + sign * i, kingPos + sign * (i + 1), TypeOfMove.Move));
+
+                // Make a null move such that it is the same player again
+                copy.Mutate(Move.NullMove);
+
+                // you cannot be in check!
+                if (copy.GetInCheck())
+                    return false;
+            }
+
+            return true;
+        }
+
         public static double Weighting(TypeOfFigure type)
         {
             return type switch
@@ -737,11 +825,13 @@ namespace ChEngine
     {
         public List<Move> LegalMoves { get; set; }
         public double? Evaluation { get; set; }
+        public bool? InCheck;
 
         public void Clear()
         {
             LegalMoves = null;
             Evaluation = null;
+            InCheck = null;
         }
     }
 
