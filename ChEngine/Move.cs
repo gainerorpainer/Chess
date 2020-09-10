@@ -1,28 +1,19 @@
 ﻿namespace ChEngine
 {
-    public enum MoveType
-    {
-        Move = 0,
-        Take,
-        CastleKingside,
-        CastleQueenside,
-        PromoteKnight = 'N',
-        PromoteBishop = 'B',
-        PromoteRook = 'R',
-        PromoteQueen = 'Q',
-    }
 
     public struct Move
     {
         public int From;
         public int To;
-        public MoveType MoveType;
+        public TypeOfMove Type;
+        public TypeOfPromotion Promotion;
 
-        public Move(int from, int to, MoveType moveType)
+        public Move(int from, int to, TypeOfMove moveType, TypeOfPromotion promotion = TypeOfPromotion.NoPromotion)
         {
             From = from;
             To = to;
-            MoveType = moveType;
+            Type = moveType;
+            Promotion = promotion;
         }
     }
 }

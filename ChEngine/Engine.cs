@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -10,9 +11,12 @@ namespace ChEngine
     public class Engine
     {
         public bool IsWhite { get; set; }
+        public int MaxDepth { get; set; } = 1;
 
         public EngineStatistics Statistics => InterlockedEngineStats.Statistics;
 
+        private const double BEST_SCORE = double.MaxValue;
+        private const double WORST_SCORE = -BEST_SCORE;
         private CancellationTokenSource cancellationTokenSource;
 
         public Engine(bool isWhite)
@@ -22,102 +26,123 @@ namespace ChEngine
 
         public Move ReactToMove(IEnumerable<Move> moves)
         {
-            var newBoard = new Board(moves);
-
-            double bestScore = -double.MaxValue;
-            Move bestMove;
-
             // Make a move within the next 3 seconds
             cancellationTokenSource = new CancellationTokenSource();
             cancellationTokenSource.CancelAfter(3000);
             //cancellationTokenSource.Cancel();
 
-            // Stats object
+            var initialBoard = new Board(moves);
+
+            // Reset stats
             InterlockedEngineStats.Reset();
 
-            List<Move> myMoves = newBoard.GetLegalMoves();
-
-            // There must be at least one move, otherwise this would already be checkmate!
-            bestMove = myMoves.First();
-            object mutex = new object();
-
-            Parallel.ForEach(myMoves, myMove =>
+            // Start with the first tree layer
+            List<TreeNode> lastTreeLayer = initialBoard.GetLegalMoves().Select(x => new TreeNode()
             {
+                Board = new Board(moves.Append(x)), // This is far from optimal, but ok since this is only done in init phase
+                Children = new List<TreeNode>(),
+                Evaluation = double.NaN,
+                Parent = null,
+                Move = x
+            }).ToList();
 
-                double score = EvaluateContinuation(ref newBoard, myMove, 1);
+            // Start building a tree
+            List<TreeNode> gameTree = new List<TreeNode>(lastTreeLayer);
+            int depth = 0;
 
-                lock (mutex)
+            do
+            {
+                List<TreeNode> newTreeLayer = new List<TreeNode>();
+
+                foreach (var parentNode in lastTreeLayer)
                 {
-                    if (Sign(score) > bestScore)
+                    foreach (var possibleMove in parentNode.Board.GetLegalMoves())
                     {
-                        bestScore = Sign(score);
-                        bestMove = myMove;
+                        // make a copy and change it
+                        Board branchBoardAfterMove = (Board)(parentNode.Board.Clone());
+                        branchBoardAfterMove.Mutate(possibleMove);
+
+                        TreeNode childNode = new TreeNode()
+                        {
+                            Board = branchBoardAfterMove,
+                            Children = new List<TreeNode>(),
+                            Evaluation = double.NaN,
+                            Parent = parentNode,
+                            IsComplete = false,
+                            Move = possibleMove
+                        };
+
+                        newTreeLayer.Add(childNode);
+                        parentNode.Children.Add(childNode);
                     }
+
+                    parentNode.IsComplete = true;
+
+                    // Timeout applied
+                    if (cancellationTokenSource.IsCancellationRequested)
+                        break;
+                }
+
+                if (cancellationTokenSource.IsCancellationRequested)
+                    break;
+
+                InterlockedEngineStats.Update_MaxDepth(++depth);
+
+                // swap
+                lastTreeLayer = newTreeLayer;
+
+            } while (!cancellationTokenSource.IsCancellationRequested);
+
+            // Traverse tree
+            double bestScore = Sign(WORST_SCORE);
+            Move bestMove = gameTree.First().Move;
+            foreach (var candidate in gameTree)
+            {
+                double deepEvaluation = RecursiveEvaluateNode(candidate);
+                if (Sign(deepEvaluation) > Sign(bestScore))
+                {
+                    bestScore = deepEvaluation;
+                    bestMove = candidate.Move;
                 }
             }
-            );
+
+            InterlockedEngineStats.Set_Evaluation(bestScore);
 
             return bestMove;
         }
 
         /// <summary>
-        /// Evaluates recursively one continuation (of me)
+        /// Recursively searches a tree node and gives the evaluation for this node assuming best play for each player
         /// </summary>
-        /// <param name="board">Board to start from</param>
-        /// <param name="move">Move to apply</param>
-        /// <returns>Number that is better the higher it is</returns>
-        private double EvaluateContinuation(ref Board board, Move move, int depth)
+        /// <param name="node">Current node</param>
+        /// <returns>Evaluation (pos: white advantage)</returns>
+        private double RecursiveEvaluateNode(TreeNode node)
         {
-            // if there is no more time left, just evaluate and break the recursion
-            if (cancellationTokenSource.IsCancellationRequested)
-                return board.GetEvaluation();
+            // End of recursion
+            if (node.Children.Count == 0)
+                return node.Board.GetEvaluation();
 
-            InterlockedEngineStats.Increment_NodesVisited();
-            InterlockedEngineStats.Update_MaxDepth(depth);
+            // Assume worst evaluation
+            double sign = GetSign(node.Board.IsWhiteToMove);
+            double bestScore = sign * WORST_SCORE;
 
-            // make a copy to not change to ref
-            Board branchMyMove = (Board)board.Clone();
-            branchMyMove.Mutate(move);
-
-            // check each legal move for enemy 
-            foreach (var enemyMove in branchMyMove.GetLegalMoves())
+            // Find best evaluation
+            foreach (var childNode in node.Children)
             {
-                // Make another copy to check the enemyMove
-                Board branchEnemyMove = (Board)branchMyMove.Clone();
-                branchEnemyMove.Mutate(enemyMove);
-
-                var legalMoves = branchEnemyMove.GetLegalMoves();
-
-                if (legalMoves.Count == 0)
-                {
-                    if (branchEnemyMove.GetBoardState() == GameState.Checkmate)
-                        // Enemy checkmates me
-                        return double.MaxValue * -1;
-                    else
-                        throw new NotImplementedException();
-                }
-
-                // go in recursion
-                // this continuation is only as good as the worst recursive evaluation
-                double worstScore = double.MaxValue;
-                object mutex = new object();
-                Parallel.ForEach(legalMoves, myMove =>
-                {
-                    double score = EvaluateContinuation(ref branchEnemyMove, myMove, depth + 1);
-                    lock (mutex)
-                    {
-                        if (Sign(score) < worstScore)
-                            worstScore = Sign(score);
-                    }
-                }
-                );
-
-                return Sign(worstScore);
+                double score = RecursiveEvaluateNode(childNode);
+                if (sign * score > sign * bestScore)
+                    bestScore = score;
             }
 
-            // if enemy has no legal moves, this results in checkmate
-            return double.MaxValue;
+            return bestScore;
         }
+
+        /// <summary>
+        /// Get a signed 1.0 depending on the color
+        /// </summary>
+        /// <param name="isWhite"></param>
+        /// <returns>+1.0 if white, -1.0 if not white</returns>
+        static double GetSign(bool isWhite) => isWhite ? 1 : -1;
 
         /// <summary>
         /// Applies a sign such that the score is flipped for black

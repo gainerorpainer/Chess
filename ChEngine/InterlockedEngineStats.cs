@@ -9,15 +9,21 @@ namespace ChEngine
     {
         private static int NodesVisited_;
         private static int MaxDepth_;
+        private static double Evaluation_;
 
-        public static EngineStatistics Statistics => new EngineStatistics() { NodesVisited = NodesVisited_, MaxDepth = MaxDepth_ };
+        public static EngineStatistics Statistics => new EngineStatistics() { NodesVisited = NodesVisited_, MaxDepth = MaxDepth_, Evaluation = Evaluation_ };
 
         public static void Reset() => NodesVisited_ = MaxDepth_ = 0;
 
-        public static int Increment_NodesVisited() => Interlocked.Increment(ref NodesVisited_);
+        public static void Increment_NodesVisited()
+        {
+            // Interlocked.Increment(ref NodesVisited_);
+        }
 
         public static void Update_MaxDepth(int depth)
         {
+            return;
+
             // check if this is bigger
             while (true)
             {
@@ -36,13 +42,15 @@ namespace ChEngine
                 if (depth <= actualValue)
                     return;
             }
-
         }
+
+        public static void Set_Evaluation(double evaluation) => Interlocked.Exchange(ref Evaluation_, evaluation);
     }
 
     public class EngineStatistics
     {
         public int NodesVisited { get; set; }
         public int MaxDepth { get; set; }
+        public double Evaluation { get; set; }
     }
 }

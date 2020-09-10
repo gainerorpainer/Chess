@@ -18,11 +18,20 @@ namespace Ch
             Lichess lichess = new Lichess();
 
             Console.WriteLine("Setting up connection...");
-            Console.WriteLine($"Logged in as \"{lichess.GetUsername()}\"");
+            string username = null;
+            do
+            {
+                username = lichess.GetUsername();
+            } while (username is null);
+            Console.WriteLine($"Logged in as \"{username}\"");
+
+            lichess.BeginEventListen();
 
             string gameId;
 
             Console.WriteLine("Checking running games...");
+            // wait some not to have a running condition
+            Thread.Sleep(500);
             List<string> runningGames = lichess.GetGameIds();
             if (runningGames.Count == 0)
             {

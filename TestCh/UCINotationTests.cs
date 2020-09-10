@@ -13,14 +13,14 @@ namespace ChEngine.Tests
         public void ToStringTest()
         {
             // GetUIC
-            Assert.AreEqual(new UCINotation(new Move(0, 8, MoveType.Move)).ToString(), "a1a2");
-            Assert.AreEqual(new UCINotation(new Move(8 * 8 - 1, 7 * 8 - 1, MoveType.Move)).ToString(), "h8h7");
-            Assert.AreEqual(new UCINotation(new Move(0, 8, MoveType.Take)).ToString(), "a1xa2");
-            Assert.AreEqual(new UCINotation(new Move(8 * 8 - 1, 7 * 8 - 1, MoveType.Take)).ToString(), "h8xh7");
+            Assert.AreEqual(new UCINotation(new Move(0, 8, TypeOfMove.Move)).ToString(), "a1a2");
+            Assert.AreEqual(new UCINotation(new Move(8 * 8 - 1, 7 * 8 - 1, TypeOfMove.Move)).ToString(), "h8h7");
+            Assert.AreEqual(new UCINotation(new Move(0, 8, TypeOfMove.Take)).ToString(), "a1xa2");
+            Assert.AreEqual(new UCINotation(new Move(8 * 8 - 1, 7 * 8 - 1, TypeOfMove.Take)).ToString(), "h8xh7");
 
             // GetIndex
-            Assert.AreEqual(UCINotation.ParseMove("a1a2"), new Move(0, 8, MoveType.Move));
-            Assert.AreEqual(UCINotation.ParseMove("a1xb2"), new Move(0, 9, MoveType.Take));
+            Assert.AreEqual(UCINotation.DeserializeMove("a1a2"), new Move(0, 8, TypeOfMove.Move));
+            Assert.AreEqual(UCINotation.DeserializeMove("a1xb2"), new Move(0, 9, TypeOfMove.Take));
         }
     }
 }

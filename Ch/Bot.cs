@@ -38,9 +38,9 @@ namespace Ch
         {
             if (IsWhite == GetWhiteToMove(moves))
             {
-                IEnumerable<Move> movesParsed = moves.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(x => UCINotation.ParseMove(x));
+                IEnumerable<Move> movesParsed = moves.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(x => UCINotation.DeserializeMove(x));
                 Move bestMove = Engine.ReactToMove(movesParsed);
-                ReportAction($"Depth={Engine.Statistics.MaxDepth}, Nodes={Engine.Statistics.NodesVisited}");
+                ReportAction($"Depth={Engine.Statistics.MaxDepth}, Nodes={Engine.Statistics.NodesVisited}, Evaluation={Engine.Statistics.Evaluation}");
                 MoveAction(bestMove);
             }
 

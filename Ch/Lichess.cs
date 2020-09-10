@@ -32,7 +32,6 @@ namespace Ch
 
         public Lichess()
         {
-            StartEventThread();
         }
 
         ~Lichess()
@@ -48,9 +47,15 @@ namespace Ch
             gameThread_?.Join();
         }
 
-        private void StartEventThread()
+        public void BeginEventListen()
         {
-            eventThread_ = new Thread(() => HttpStream("https://lichess.org/api/stream/event", Events));
+            eventThread_ = new Thread(() =>
+            {
+                while (!cancellationTokenSource_.IsCancellationRequested)
+                {
+                    HttpStream("https://lichess.org/api/stream/event", Events);
+                }
+            });
             eventThread_.Start();
         }
 
@@ -59,7 +64,13 @@ namespace Ch
             if (gameThread_ != null)
                 EndGameListen();
 
-            gameThread_ = new Thread(() => HttpStream($"https://lichess.org/api/bot/game/stream/{gameId}", GameEvents));
+            gameThread_ = new Thread(() =>
+            {
+                while (!cancellationTokenSource_.IsCancellationRequested)
+                {
+                    HttpStream($"https://lichess.org/api/bot/game/stream/{gameId}", GameEvents);
+                }
+            });
             gameThread_.Start();
         }
 
@@ -70,7 +81,7 @@ namespace Ch
             gameThread_ = null;
 
             // Restart event thread
-            StartEventThread();
+            BeginEventListen();
         }
 
 
@@ -81,8 +92,22 @@ namespace Ch
             var task = client.GetStringAsync(uri);
 
             // wait up till one second
-            if (!task.Wait(1000))
-                return null;
+            bool taskReady;
+            try
+            {
+                taskReady = task.Wait(1000);
+            }
+            catch (AggregateException ex)
+            {
+                Console.WriteLine(ex.Message);
+                taskReady = false;
+            }
+
+            if (!taskReady)
+            {
+                NotifyConnectionError();
+                return "";
+            }
 
             return task.Result;
         }
@@ -107,7 +132,24 @@ namespace Ch
             request.Headers.Add(HttpRequestHeader.Authorization, "Bearer " + TOKEN);
             request.Timeout = (int)TIMEOUT.TotalMilliseconds;
 
-            WebResponse webResponse = request.GetResponse();
+            WebResponse webResponse;
+            try
+            {
+                webResponse = request.GetResponse();
+            }
+            catch (WebException webEx)
+            {
+                if (webEx.Status == WebExceptionStatus.Timeout)
+                {
+                    // Wait for internet
+                    NotifyConnectionError();
+
+                    return;
+                }
+
+                throw;
+            }
+
             var responseStream = webResponse.GetResponseStream();
 
             StreamReader reader = new StreamReader(responseStream);
@@ -123,6 +165,17 @@ namespace Ch
                     target.Enqueue(JsonConvert.DeserializeObject<T>(line));
                 }
             }
+        }
+
+        private static void NotifyConnectionError()
+        {
+            Console.Write("Connection not ok");
+            for (int i = 0; i < 10; i++)
+            {
+                Console.Write('.');
+                Thread.Sleep(500);
+            }
+            Console.WriteLine();
         }
 
         private static HttpClient GetClient()
@@ -150,7 +203,7 @@ namespace Ch
 
         public List<string> GetChallenges() => ConsumeEvents().Where(x => x.type == "challenge").Select(x => x.challenge.id).ToList();
 
-        public string GetUsername() => HttpGet<Account>("https://lichess.org/api/account").username;
+        public string GetUsername() => HttpGet<Account>("https://lichess.org/api/account")?.username;
 
         public void Chat(string gameId, string message) =>
             // prepare

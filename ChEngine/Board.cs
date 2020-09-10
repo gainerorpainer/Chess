@@ -23,36 +23,36 @@ namespace ChEngine
             // Standard config: pawns
             for (int i = 8; i < 8 + 8; i++)
             {
-                result[i] = new Field(true, FigureType.Pawn);
-                result[i + 5 * 8] = new Field(false, FigureType.Pawn);
+                result[i] = new Field(true, TypeOfFigure.Pawn);
+                result[i + (5 * 8)] = new Field(false, TypeOfFigure.Pawn);
             }
 
             const int sevenRows = 7 * 8;
 
             // standard config: pieces
-            result[0] = new Field(true, FigureType.Rook);
-            result[0 + sevenRows] = new Field(false, FigureType.Rook);
+            result[0] = new Field(true, TypeOfFigure.Rook);
+            result[0 + sevenRows] = new Field(false, TypeOfFigure.Rook);
 
-            result[1] = new Field(true, FigureType.Knight);
-            result[1 + sevenRows] = new Field(false, FigureType.Knight);
+            result[1] = new Field(true, TypeOfFigure.Knight);
+            result[1 + sevenRows] = new Field(false, TypeOfFigure.Knight);
 
-            result[2] = new Field(true, FigureType.Bishop);
-            result[2 + sevenRows] = new Field(false, FigureType.Bishop);
+            result[2] = new Field(true, TypeOfFigure.Bishop);
+            result[2 + sevenRows] = new Field(false, TypeOfFigure.Bishop);
 
-            result[3] = new Field(true, FigureType.Queen);
-            result[3 + sevenRows] = new Field(false, FigureType.Queen);
+            result[3] = new Field(true, TypeOfFigure.Queen);
+            result[3 + sevenRows] = new Field(false, TypeOfFigure.Queen);
 
-            result[4] = new Field(true, FigureType.King);
-            result[4 + sevenRows] = new Field(false, FigureType.King);
+            result[4] = new Field(true, TypeOfFigure.King);
+            result[4 + sevenRows] = new Field(false, TypeOfFigure.King);
 
-            result[5] = new Field(true, FigureType.Bishop);
-            result[5 + sevenRows] = new Field(false, FigureType.Bishop);
+            result[5] = new Field(true, TypeOfFigure.Bishop);
+            result[5 + sevenRows] = new Field(false, TypeOfFigure.Bishop);
 
-            result[6] = new Field(true, FigureType.Knight);
-            result[6 + sevenRows] = new Field(false, FigureType.Knight);
+            result[6] = new Field(true, TypeOfFigure.Knight);
+            result[6 + sevenRows] = new Field(false, TypeOfFigure.Knight);
 
-            result[7] = new Field(true, FigureType.Rook);
-            result[7 + sevenRows] = new Field(false, FigureType.Rook);
+            result[7] = new Field(true, TypeOfFigure.Rook);
+            result[7 + sevenRows] = new Field(false, TypeOfFigure.Rook);
 
             return result;
         }
@@ -100,16 +100,16 @@ namespace ChEngine
 
         internal void Mutate(Move move)
         {
-            switch (move.MoveType)
+            switch (move.Type)
             {
-                case MoveType.Move:
-                case MoveType.Take:
+                case TypeOfMove.Move:
+                case TypeOfMove.Take:
                     // Pick piece
                     Field figureFrom = Fields[move.From];
 
 
                     // remove from
-                    Fields[move.From].Figure = FigureType.EMPTY;
+                    Fields[move.From].Figure = TypeOfFigure.EMPTY;
 
                     // Check destination
                     Field figureTo = Fields[move.To];
@@ -122,39 +122,30 @@ namespace ChEngine
                     Cache.Clear();
                     break;
 
-                    
-                case MoveType.CastleKingside:
-                    
-                case MoveType.CastleQueenside:
-                    
-                case MoveType.PromoteKnight:
-                    
-                case MoveType.PromoteBishop:
-                    
-                case MoveType.PromoteRook:
-                    
-                case MoveType.PromoteQueen:
-                    
                 default:
                     throw new NotImplementedException();
             }
-        }
 
-        public GameState GetBoardState()
-        {
-            // Check Cache
-            if (Cache.BoardState != null)
-                return Cache.BoardState.Value;
+            switch (move.Promotion)
+            {
+                case TypeOfPromotion.NoPromotion:
+                    break;
 
-            GameState result = default;
+                case TypeOfPromotion.PromoteKnight:
+                case TypeOfPromotion.PromoteBishop:
+                case TypeOfPromotion.PromoteRook:
+                case TypeOfPromotion.PromoteQueen:
+                    // Get type
+                    var pieceType = (TypeOfFigure)move.Type;
 
-            if (GetLegalMoves().Count == 0)
-                result = GameState.Checkmate;
+                    // place piece there
+                    Fields[move.To].Figure = pieceType;
 
-            // Store cache
-            Cache.BoardState = result;
+                    break;
 
-            return result;
+                default:
+                    throw new NotImplementedException();
+            }
         }
 
         public List<Move> GetLegalMoves()
@@ -163,8 +154,50 @@ namespace ChEngine
             if (Cache.LegalMoves != null)
                 return Cache.LegalMoves;
 
-            List<Move> moves = new List<Move>();
+            List<Move> moves = GetMoves_IgnoreKingRules().ToList();
 
+            // you are never allowed to make a move which would make it possible for your enemy to take your king on his next move!
+            // This automatically includes 'check' and 'pinned pieces' rule
+            List<Move> protectKingRule = new List<Move>();
+
+            // find your king here
+            int kingLocation = Fields.ToList().FindIndex(x => x.Figure == TypeOfFigure.King && x.IsWhite == IsWhiteToMove);
+
+            // todo: maybe easiest is to make a copy for each legal move and see if you can take the king
+            foreach (var move in moves)
+            {
+                var clone = (Board)Clone();
+                clone.Mutate(move);
+
+                // check if you need to recalculate king location
+                int possiblyNewKingLocation = move.From != kingLocation ? kingLocation : move.To;
+
+                // Check enemy moves
+                var couldTakeKing = clone.GetMoves_IgnoreKingRules().Any(x => x.Type == TypeOfMove.Take && x.To == possiblyNewKingLocation);
+                if (couldTakeKing)
+                    continue;
+
+                // This move is ok
+                protectKingRule.Add(move);
+            }
+
+            moves = protectKingRule;
+
+            // Store cache
+            Cache.LegalMoves = moves;
+
+            return moves;
+        }
+
+        /// <summary>
+        /// Returns an iterator for looking for simple moves
+        /// These are moves that you can take by applying the normal move rules for pieces
+        /// Like: Empty space, takes, etc
+        /// Does not take check or pinning rules into consideration
+        /// </summary>
+        /// <returns></returns>
+        public IEnumerable<Move> GetMoves_IgnoreKingRules()
+        {
             // Find each figure
             for (int i = 0; i < 8 * 8; i++)
             {
@@ -176,98 +209,138 @@ namespace ChEngine
 
                 switch (f.Figure)
                 {
-                    case FigureType.EMPTY:
+                    case TypeOfFigure.EMPTY:
                         break;
-                    case FigureType.Rook:
-                        AddRooklikeMoves(moves, i);
+
+                    case TypeOfFigure.Rook:
+                        foreach (var item in RooklikeMoves(i))
+                            yield return item;
                         break;
-                    case FigureType.Knight:
-                        AddKnightlikeMoves(moves, i);
+
+                    case TypeOfFigure.Knight:
+                        foreach (var item in KnightlikeMoves(i))
+                            yield return item;
                         break;
-                    case FigureType.Bishop:
-                        AddBishoplikeMoves(moves, i);
+
+                    case TypeOfFigure.Bishop:
+                        foreach (var item in BishoplikeMoves(i))
+                            yield return item;
                         break;
-                    case FigureType.Queen:
-                        AddRooklikeMoves(moves, i);
-                        AddBishoplikeMoves(moves, i);
+
+                    case TypeOfFigure.Queen:
+                        foreach (var item in RooklikeMoves(i))
+                            yield return item;
+                        foreach (var item in BishoplikeMoves(i))
+                            yield return item;
                         break;
-                    case FigureType.King:
-                        AddKinglikeMoves(moves, i);
+
+                    case TypeOfFigure.King:
+                        foreach (var item in KinglikeMoves(i))
+                            yield return item;
                         break;
-                    case FigureType.Pawn:
-                        AddPawnlikeMoves(moves, i);
+
+                    case TypeOfFigure.Pawn:
+                        foreach (var item in PawnlikeMoves(i))
+                            yield return item;
                         break;
+
                     default:
                         break;
                 }
             }
-
-            // Store cache
-            Cache.LegalMoves = moves;
-
-            return moves;
         }
 
-        private void AddPawnlikeMoves(List<Move> moves, int i)
+        private IEnumerable<Move> PawnlikeMoves(int i)
         {
+            // Todo: en passant
             int rowNum = i / 8;
-            if (Fields[i].IsWhite)
+            bool isWhite = Fields[i].IsWhite;
+            int oneFromLastRow = isWhite ? 7 : 1;
+            int firstLine = isWhite ? 1 : 7;
+            int sign = isWhite ? 1 : -1;
+
+
+            // can go one up if free
+            int nextField = i + sign * 8;
+            if (Fields[nextField].Figure == TypeOfFigure.EMPTY)
             {
-                switch (rowNum)
+                if (rowNum == oneFromLastRow)
                 {
-                    case 6:
-                        // can promote
-
-                        break;
-
-                    case 1:
-                        // can jump one if free
-                        if (Fields[i + 8].Figure == FigureType.EMPTY)
-                        {
-                            moves.Add(new Move(i, i + 8, MoveType.Move));
-
-                            // can jump 2 times
-                            // but only of both fields are free
-                            if (Fields[i + 2 * 8].Figure == FigureType.EMPTY)
-                                moves.Add(new Move(i, i + 2 * 8, MoveType.Move));
-                        }
-                        break;
-
-                    default:
-                        // can go one up if free
-                        if (Fields[i + 8].Figure == FigureType.EMPTY)
-                            moves.Add(new Move(i, i + 8, MoveType.Move));
-                        break;
+                    // promote if last line
+                    yield return new Move(i, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteBishop);
+                    yield return new Move(i, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteKnight);
+                    yield return new Move(i, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteQueen);
+                    yield return new Move(i, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
                 }
-
-                // Can take diagonally left
-                int colNum = i % 8;
-                if (colNum > 0)
+                else
                 {
-                    int dest = i - 1 + 1 * 8;
-                    if (
-                        (Fields[dest].Figure != FigureType.EMPTY)
-                        &&
-                        (Fields[dest].IsWhite != IsWhiteToMove)
-                    )
-                        moves.Add(new Move(i, dest, MoveType.Take));
+                    yield return new Move(i, nextField, TypeOfMove.Move);
+
+                    // can jump 2 times if both are free and has not moved yet
+                    if (rowNum == firstLine)
+                    {
+                        nextField = nextField + sign * 8;
+                        if (Fields[nextField].Figure == TypeOfFigure.EMPTY)
+                            yield return new Move(i, nextField, TypeOfMove.Move);
+                    }
                 }
+            }
 
-                // and right
-                if (colNum < 7)
+            // Can take diagonally left
+            int colNum = i % 8;
+            if (colNum > 0)
+            {
+                // note, this is left regardless if black or white!
+                int dest = i - 1 + sign * 8;
+                if (
+                    (Fields[dest].Figure != TypeOfFigure.EMPTY)
+                    &&
+                    (Fields[dest].IsWhite != IsWhiteToMove)
+                )
                 {
-                    int dest = i + 1 + 1 * 8;
-                    if (
-                        (Fields[dest].Figure != FigureType.EMPTY)
-                        &&
-                        (Fields[dest].IsWhite != IsWhiteToMove)
-                    )
-                        moves.Add(new Move(i, dest, MoveType.Take));
+                    if (rowNum != oneFromLastRow)
+                    {
+                        yield return new Move(i, dest, TypeOfMove.Take);
+                    }
+                    // And promote if last line
+                    else
+                    {
+                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteBishop);
+                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteKnight);
+                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteQueen);
+                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
+                    }
+                }
+            }
+
+            // and right
+            if (colNum < 7)
+            {
+                // Note: this is right regardless if black or white
+                int dest = i + 1 + sign * 8;
+                if (
+                    (Fields[dest].Figure != TypeOfFigure.EMPTY)
+                    &&
+                    (Fields[dest].IsWhite != IsWhiteToMove)
+                )
+                {
+                    if (rowNum != oneFromLastRow)
+                    {
+                        yield return new Move(i, dest, TypeOfMove.Take);
+                    }
+                    // And promote if last line
+                    else
+                    {
+                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteBishop);
+                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteKnight);
+                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteQueen);
+                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
+                    }
                 }
             }
         }
 
-        private void AddKinglikeMoves(List<Move> moves, int i)
+        private IEnumerable<Move> KinglikeMoves(int i)
         {
             // There are 8 configurations
             List<Point> vectors = new List<Point>() {
@@ -317,12 +390,16 @@ namespace ChEngine
             // iterate over each
             foreach (var vec in vectors)
             {
-                int index = i + vec.X + vec.Y * 8;
-                AddIfEmptyOrEnemy(moves, i, index);
+                int index = i + vec.X + (vec.Y * 8);
+
+                if (Fields[index].Figure == TypeOfFigure.EMPTY)
+                    yield return new Move(i, index, TypeOfMove.Move);
+                else if (Fields[index].IsWhite ^ IsWhiteToMove)
+                    yield return new Move(i, index, TypeOfMove.Take);
             }
         }
 
-        private void AddKnightlikeMoves(List<Move> moves, int i)
+        private IEnumerable<Move> KnightlikeMoves(int i)
         {
             // There are 8 configurations
             List<Point> vectors = new List<Point>() {
@@ -388,20 +465,17 @@ namespace ChEngine
             // iterate over leftovers
             foreach (var vec in vectors)
             {
-                int index = i + vec.X + vec.Y * 8;
-                AddIfEmptyOrEnemy(moves, i, index);
+                int index = i + vec.X + (vec.Y * 8);
+
+                if (Fields[index].Figure == TypeOfFigure.EMPTY)
+                    yield return new Move(i, index, TypeOfMove.Move);
+                else if (Fields[index].IsWhite ^ IsWhiteToMove)
+                    yield return new Move(i, index, TypeOfMove.Take);
             }
         }
 
-        private void AddIfEmptyOrEnemy(List<Move> moves, int from, int to)
-        {
-            if (Fields[to].Figure == FigureType.EMPTY)
-                moves.Add(new Move(from, to, MoveType.Move));
-            else if (Fields[to].IsWhite ^ IsWhiteToMove)
-                moves.Add(new Move(from, to, MoveType.Take));
-        }
 
-        private void AddBishoplikeMoves(List<Move> moves, int i)
+        private IEnumerable<Move> BishoplikeMoves(int i)
         {
             // Store some vars
             int colNum = i % 8;
@@ -416,16 +490,16 @@ namespace ChEngine
             for (int times = 0; times < Math.Min(columnsToRight, rowsToTop); times++)
             {
                 index += 8 + 1;
-                if (Fields[index].Figure != FigureType.EMPTY)
+                if (Fields[index].Figure != TypeOfFigure.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(new Move(i, index, MoveType.Take));
+                        yield return (new Move(i, index, TypeOfMove.Take));
 
                     break;
                 }
 
-                moves.Add(new Move(i, index, MoveType.Move));
+                yield return (new Move(i, index, TypeOfMove.Move));
             }
 
             // Go left and up until you hit something
@@ -433,16 +507,16 @@ namespace ChEngine
             for (int times = 0; times < Math.Min(colNum, rowsToTop); times++)
             {
                 index += 8 - 1;
-                if (Fields[index].Figure != FigureType.EMPTY)
+                if (Fields[index].Figure != TypeOfFigure.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(new Move(i, index, MoveType.Take));
+                        yield return (new Move(i, index, TypeOfMove.Take));
 
                     break;
                 }
 
-                moves.Add(new Move(i, index, MoveType.Move));
+                yield return (new Move(i, index, TypeOfMove.Move));
             }
 
             // Go left and down until you hit something
@@ -450,16 +524,16 @@ namespace ChEngine
             for (int times = 0; times < Math.Min(colNum, rowNum); times++)
             {
                 index += -8 - 1;
-                if (Fields[index].Figure != FigureType.EMPTY)
+                if (Fields[index].Figure != TypeOfFigure.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(new Move(i, index, MoveType.Take));
+                        yield return (new Move(i, index, TypeOfMove.Take));
 
                     break;
                 }
 
-                moves.Add(new Move(i, index, MoveType.Move));
+                yield return (new Move(i, index, TypeOfMove.Move));
             }
 
             // Go right and down until you hit something
@@ -467,20 +541,20 @@ namespace ChEngine
             for (int times = 0; times < Math.Min(columnsToRight, rowNum); times++)
             {
                 index += -8 + 1;
-                if (Fields[index].Figure != FigureType.EMPTY)
+                if (Fields[index].Figure != TypeOfFigure.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(new Move(i, index, MoveType.Take));
+                        yield return (new Move(i, index, TypeOfMove.Take));
 
                     break;
                 }
 
-                moves.Add(new Move(i, index, MoveType.Move));
+                yield return (new Move(i, index, TypeOfMove.Move));
             }
         }
 
-        private void AddRooklikeMoves(List<Move> moves, int i)
+        private IEnumerable<Move> RooklikeMoves(int i)
         {
             // Store some vars
             int colNum = i % 8;
@@ -492,64 +566,64 @@ namespace ChEngine
             for (int colI = columnOffset + 1; colI < 8; colI++)
             {
                 int index = colI + rowOffset;
-                if (Fields[index].Figure != FigureType.EMPTY)
+                if (Fields[index].Figure != TypeOfFigure.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(new Move(i, index, MoveType.Take));
+                        yield return new Move(i, index, TypeOfMove.Take);
 
                     break;
                 }
 
-                moves.Add(new Move(i, index, MoveType.Move));
+                yield return new Move(i, index, TypeOfMove.Move);
             }
 
             // Go left until you hit something
             for (int colI = columnOffset - 1; colI >= 0; colI--)
             {
                 int index = colI + rowOffset;
-                if (Fields[index].Figure != FigureType.EMPTY)
+                if (Fields[index].Figure != TypeOfFigure.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(new Move(i, index, MoveType.Take));
+                        yield return new Move(i, index, TypeOfMove.Take);
 
                     break;
                 }
 
-                moves.Add(new Move(i, index, MoveType.Move));
+                yield return new Move(i, index, TypeOfMove.Move);
             }
 
             // Go up until you hit something
             for (int rowI = rowNum + 1; rowI < 8; rowI++)
             {
-                int index = columnOffset + rowI * 8;
-                if (Fields[index].Figure != FigureType.EMPTY)
+                int index = columnOffset + (rowI * 8);
+                if (Fields[index].Figure != TypeOfFigure.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(new Move(i, index, MoveType.Take));
+                        yield return new Move(i, index, TypeOfMove.Take);
 
                     break;
                 }
 
-                moves.Add(new Move(i, index, MoveType.Move));
+                yield return new Move(i, index, TypeOfMove.Move);
             }
 
             // go down until you hit something
             for (int rowI = rowNum - 1; rowI >= 0; rowI--)
             {
-                int index = columnOffset + rowI * 8;
-                if (Fields[index].Figure != FigureType.EMPTY)
+                int index = columnOffset + (rowI * 8);
+                if (Fields[index].Figure != TypeOfFigure.EMPTY)
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        moves.Add(new Move(i, index, MoveType.Take));
+                        yield return (new Move(i, index, TypeOfMove.Take));
 
                     break;
                 }
 
-                moves.Add(new Move(i, index, MoveType.Move));
+                yield return new Move(i, index, TypeOfMove.Move);
             }
         }
 
@@ -571,44 +645,31 @@ namespace ChEngine
             return score;
         }
 
-        public static double Weighting(FigureType type)
+        public static double Weighting(TypeOfFigure type)
         {
             return type switch
             {
-                FigureType.EMPTY => 0,
-                FigureType.Rook => 5,
-                FigureType.Knight => 3,
-                FigureType.Bishop => 3,
-                FigureType.Queen => 9,
-                FigureType.King => 50,
-                FigureType.Pawn => 1,
+                TypeOfFigure.EMPTY => 0,
+                TypeOfFigure.Rook => 5,
+                TypeOfFigure.Knight => 3,
+                TypeOfFigure.Bishop => 3,
+                TypeOfFigure.Queen => 9,
+                TypeOfFigure.King => 50,
+                TypeOfFigure.Pawn => 1,
                 _ => throw new NotImplementedException(),
             };
         }
     }
 
-
-
-    public enum GameState
-    {
-        NDEF,
-        Normal,
-        Check,
-        Checkmate
-    }
-
-
     public class Cache
     {
         public List<Move> LegalMoves { get; set; }
         public double? Evaluation { get; set; }
-        public GameState? BoardState { get; set; }
 
         public void Clear()
         {
             LegalMoves = null;
             Evaluation = null;
-            BoardState = null;
         }
     }
 }
