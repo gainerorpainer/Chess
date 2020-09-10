@@ -1,8 +1,8 @@
 using ChEngine;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
-using System.Security.Cryptography.X509Certificates;
 
 namespace TestCh
 {
@@ -20,8 +20,26 @@ namespace TestCh
             // make a value copy
             copy = (Board)original.Clone();
 
+            // make sure a copy was made
             Assert.AreNotSame(original, copy);
+            Assert.AreNotSame(original.Fields[0], copy.Fields[0]);
+            Assert.AreNotSame(original.PlayerOptions[0], copy.PlayerOptions[0]);
+
+            // assert value semantics
             Assert.AreEqual(original, copy);
+            Assert.AreEqual(original.Fields[0], copy.Fields[0]);
+            Assert.AreEqual(original.PlayerOptions[0], copy.PlayerOptions[0]);
+
+            // mutate the copy and check that nothing changed on the original
+            var originalFieldBefore = original.Fields[UCINotation.UCIToIndex("a2")];
+            copy.Mutate(new Move(UCINotation.UCIToIndex("a2"), UCINotation.UCIToIndex("a3"), TypeOfMove.Move));
+            var originalFieldAfter = original.Fields[UCINotation.UCIToIndex("a2")];
+            //Assert.AreSame(originalFieldBefore, originalFieldAfter);
+            Assert.IsTrue(originalFieldBefore.GetType().IsValueType);
+            Assert.AreEqual(originalFieldBefore, originalFieldAfter);
+
+            // redo copy
+            copy = (Board)original.Clone();
 
             // Test cache semantics
             copy.GetEvaluation();
@@ -42,7 +60,7 @@ namespace TestCh
         }
 
         [TestMethod]
-        public void TestAvailableMoves()
+        public void TestStartPositionMoves()
         {
             // in the first move, there must be the following moves available
             List<string> firstMoves = new List<string>()
@@ -83,6 +101,91 @@ namespace TestCh
             CollectionAssert.AreEquivalent(firstMoves, boardMoves);
         }
 
+        [TestMethod]
+        public void Test_PinnedPawn()
+        {
+            Board b = new Board(new string[]
+            {
+                "e2e4", // Expand white king pawn
+                "d7d5", // offer black queen pawn
+                "d1e2", // queen oposite black king
+                "e7e6", // expand king pawn
+                "e4d5", // take queen pawn, pin black king pawn
+            }.Select(x => UCINotation.DeserializeMove(x)));
 
+            // the pawn on d6 cannot take
+            Move illegalMove = UCINotation.DeserializeMove("e6xd5");
+            CollectionAssert.Contains(b.GetMoves_IgnoreCheckRules().ToList(), illegalMove);
+            CollectionAssert.DoesNotContain(b.GetLegalMoves(), illegalMove);
+        }
+
+        [TestMethod]
+        public void Test_StartInCheck()
+        {
+            Board b = new Board(new string[]
+            {
+                "f2f4", // open up king diagnonal
+                "d7d5", // open up queen diag
+                "f4d5", // does not really matter
+                "d8h4", // queen check white king
+            }.Select(x => UCINotation.DeserializeMove(x)));
+
+            // many king ignoring moves
+            Assert.IsTrue(b.GetMoves_IgnoreCheckRules().Count() > 1);
+
+            // Only legal move!
+            var moves = b.GetLegalMoves();
+
+            Assert.IsTrue(moves.Count == 1);
+            Assert.AreEqual(moves.First(), UCINotation.DeserializeMove("g2g3"));
+        }
+
+        [TestMethod]
+        public void Test_Castling()
+        {
+            Board b = new Board(new string[]
+            {
+                "e2e3", // open up bishop diagnal
+                "a7a6", // anything
+                "f1e2", // move bishop
+                "a6a5", // anything
+                "g1f3", // move knight
+                "a5a4", // anything
+            }.Select(x => UCINotation.DeserializeMove(x)));
+
+            // castle kingside
+            var castleKingside = UCINotation.DeserializeMove("e1g1");
+            var moves = b.GetLegalMoves();
+
+            CollectionAssert.Contains(moves, castleKingside);
+        }
+
+        [TestMethod]
+        public void Test_Enpassant()
+        {
+            Board b = new Board(new string[]
+            {
+                "e2e4", // Advance
+                "a7a6", // anything
+                "e4e5", // Advance further
+                "f7f5", // longjump
+            }.Select(x => UCINotation.DeserializeMove(x)));
+
+            Assert.IsTrue(b.PlayerOptions[b.CurrentPlayerId()].CheckEnpassantOnCol(5));
+
+            var enpassantTakes = UCINotation.DeserializeMove("e5xf6");
+            var moves = b.GetLegalMoves();
+
+            CollectionAssert.Contains(moves, enpassantTakes);
+
+            // make another move and lose the option to enpassant
+            b.Mutate(UCINotation.DeserializeMove("a2a3"));
+            Assert.IsFalse(b.PlayerOptions[b.OtherPlayerId()].CheckEnpassantOnCol(5));
+
+            // which cannot be made next move either
+            b.Mutate(UCINotation.DeserializeMove("a5a4"));
+            moves = b.GetLegalMoves();
+            CollectionAssert.DoesNotContain(moves, enpassantTakes);
+        }
     }
 }

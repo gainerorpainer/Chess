@@ -15,8 +15,8 @@ namespace ChEngine.Tests
             // GetUIC
             Assert.AreEqual(new UCINotation(new Move(0, 8, TypeOfMove.Move)).ToString(), "a1a2");
             Assert.AreEqual(new UCINotation(new Move(8 * 8 - 1, 7 * 8 - 1, TypeOfMove.Move)).ToString(), "h8h7");
-            Assert.AreEqual(new UCINotation(new Move(0, 8, TypeOfMove.Take)).ToString(), "a1xa2");
-            Assert.AreEqual(new UCINotation(new Move(8 * 8 - 1, 7 * 8 - 1, TypeOfMove.Take)).ToString(), "h8xh7");
+            Assert.AreEqual(new UCINotation(new Move(0, 8, TypeOfMove.Take)).ToString(), "a1a2");
+            Assert.AreEqual(new UCINotation(new Move(8 * 8 - 1, 7 * 8 - 1, TypeOfMove.Take)).ToString(), "h8h7");
 
             // GetIndex
             Assert.AreEqual(UCINotation.DeserializeMove("a1a2"), new Move(0, 8, TypeOfMove.Move));

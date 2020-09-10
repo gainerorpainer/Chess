@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Drawing;
 using System.Linq;
 using System.Reflection.Metadata.Ecma335;
@@ -12,10 +13,10 @@ namespace ChEngine
     {
         public Field[] Fields;
         public bool IsWhiteToMove;
+        public PlayerOption[] PlayerOptions;
         public readonly Cache Cache = new Cache();
 
         public static readonly Field[] DefaultField = CreateDefaultField();
-
         private static Field[] CreateDefaultField()
         {
             var result = new Field[8 * 8];
@@ -64,6 +65,7 @@ namespace ChEngine
         {
             Fields = (Field[])DefaultField.Clone();
             IsWhiteToMove = true;
+            PlayerOptions = new PlayerOption[2];
 
             // Apply all mutations
             foreach (var move in moves)
@@ -75,14 +77,17 @@ namespace ChEngine
             return new Board()
             {
                 Fields = (Field[])Fields.Clone(),
-                IsWhiteToMove = IsWhiteToMove
+                IsWhiteToMove = IsWhiteToMove,
+                PlayerOptions = (PlayerOption[])PlayerOptions.Clone()
             };
         }
 
         public override bool Equals(object obj)
         {
             if (obj is Board b)
-                return Enumerable.SequenceEqual(b.Fields, Fields) && (b.IsWhiteToMove && IsWhiteToMove);
+                return Enumerable.SequenceEqual(b.Fields, Fields)
+                    && (b.IsWhiteToMove && IsWhiteToMove)
+                    && Enumerable.SequenceEqual(b.PlayerOptions, PlayerOptions);
 
             return false;
         }
@@ -94,19 +99,70 @@ namespace ChEngine
                 Enumerable.Aggregate(Fields, 0, (last, next) => HashCode.Combine(
                     last,
                     next.GetHashCode()
+                )),
+                Enumerable.Aggregate(PlayerOptions, 0, (last, next) => HashCode.Combine(
+                    last,
+                    next.GetHashCode()
                 )));
         }
 
 
-        internal void Mutate(Move move)
+        public void Mutate(Move move)
         {
             switch (move.Type)
             {
                 case TypeOfMove.Move:
                 case TypeOfMove.Take:
+
                     // Pick piece
                     Field figureFrom = Fields[move.From];
 
+                    // This could be special move (king castles) or lose the right to castle
+                    if (figureFrom.Figure == TypeOfFigure.King)
+                    {
+                        // this will lose the right to castle always
+                        PlayerOptions[CurrentPlayerId()].KingsideCastle = PlayerOptions[CurrentPlayerId()].QueensideCastle = false;
+
+                        // King can normally never jump two!    
+                        int colJump = move.To % 8 - move.From % 8;
+                        int rowNumber = move.To / 8;
+
+                        // kingside
+                        if (colJump == 2)
+                        {
+                            // Note: there must be several conditions met such that this mutation is possible!
+                            // teleport rook here
+                            Fields[7 + rowNumber * 8].Figure = TypeOfFigure.EMPTY;
+                            Fields[5 + rowNumber * 8].Figure = TypeOfFigure.Rook;
+                            Fields[5 + rowNumber * 8].IsWhite = IsWhiteToMove;
+                        }
+                        // queenside
+                        else if (colJump == -2)
+                        {
+                            // teleport rook here
+                            Fields[0 + rowNumber * 8].Figure = TypeOfFigure.EMPTY;
+                            Fields[3 + rowNumber * 8].Figure = TypeOfFigure.Rook;
+                            Fields[3 + rowNumber * 8].IsWhite = IsWhiteToMove;
+                        }
+                    }
+
+                    // this could be special move pawn long jump
+                    if ((figureFrom.Figure == TypeOfFigure.Pawn) && (Math.Abs(move.From - move.To) == 2 * 8))
+                    {
+                        // add a en passant taking option for the enemy
+                        PlayerOptions[OtherPlayerId()].GiveEnpassantOnCol(move.From % 8);
+                    }
+
+                    // this rook move could loose the right to castle
+                    if (figureFrom.Figure == TypeOfFigure.Rook)
+                    {
+                        // this can overwrite multiple times, which is not bad just maybe not optimal
+                        int colNum = move.From % 8;
+                        if (colNum == 0)
+                            PlayerOptions[CurrentPlayerId()].QueensideCastle = false;
+                        else if (colNum == 7)
+                            PlayerOptions[CurrentPlayerId()].KingsideCastle = false;
+                    }
 
                     // remove from
                     Fields[move.From].Figure = TypeOfFigure.EMPTY;
@@ -114,6 +170,9 @@ namespace ChEngine
                     // Check destination
                     Field figureTo = Fields[move.To];
                     Fields[move.To] = figureFrom;
+
+                    // Revoke all options for en passant
+                    PlayerOptions[CurrentPlayerId()].ClearEnpassant();
 
                     // Flip who is to move
                     IsWhiteToMove = !IsWhiteToMove;
@@ -136,7 +195,7 @@ namespace ChEngine
                 case TypeOfPromotion.PromoteRook:
                 case TypeOfPromotion.PromoteQueen:
                     // Get type
-                    var pieceType = (TypeOfFigure)move.Type;
+                    var pieceType = (TypeOfFigure)move.Promotion;
 
                     // place piece there
                     Fields[move.To].Figure = pieceType;
@@ -148,13 +207,18 @@ namespace ChEngine
             }
         }
 
+
+        public int CurrentPlayerId() => PlayerId(IsWhiteToMove);
+        public int OtherPlayerId() => PlayerId(!IsWhiteToMove);
+        public static int PlayerId(bool isWhite) => isWhite ? 0 : 1;
+
         public List<Move> GetLegalMoves()
         {
             // Check Cache
             if (Cache.LegalMoves != null)
                 return Cache.LegalMoves;
 
-            List<Move> moves = GetMoves_IgnoreKingRules().ToList();
+            List<Move> moves = GetMoves_IgnoreCheckRules().ToList();
 
             // you are never allowed to make a move which would make it possible for your enemy to take your king on his next move!
             // This automatically includes 'check' and 'pinned pieces' rule
@@ -173,7 +237,7 @@ namespace ChEngine
                 int possiblyNewKingLocation = move.From != kingLocation ? kingLocation : move.To;
 
                 // Check enemy moves
-                var couldTakeKing = clone.GetMoves_IgnoreKingRules().Any(x => x.Type == TypeOfMove.Take && x.To == possiblyNewKingLocation);
+                var couldTakeKing = clone.GetMoves_IgnoreCheckRules().Any(x => x.Type == TypeOfMove.Take && x.To == possiblyNewKingLocation);
                 if (couldTakeKing)
                     continue;
 
@@ -196,7 +260,7 @@ namespace ChEngine
         /// Does not take check or pinning rules into consideration
         /// </summary>
         /// <returns></returns>
-        public IEnumerable<Move> GetMoves_IgnoreKingRules()
+        public IEnumerable<Move> GetMoves_IgnoreCheckRules()
         {
             // Find each figure
             for (int i = 0; i < 8 * 8; i++)
@@ -235,12 +299,12 @@ namespace ChEngine
                         break;
 
                     case TypeOfFigure.King:
-                        foreach (var item in KinglikeMoves(i))
+                        foreach (var item in KingMoves(i))
                             yield return item;
                         break;
 
                     case TypeOfFigure.Pawn:
-                        foreach (var item in PawnlikeMoves(i))
+                        foreach (var item in PawnMoves(i))
                             yield return item;
                         break;
 
@@ -250,13 +314,11 @@ namespace ChEngine
             }
         }
 
-        private IEnumerable<Move> PawnlikeMoves(int i)
+        private IEnumerable<Move> PawnMoves(int i)
         {
-            // Todo: en passant
             int rowNum = i / 8;
             bool isWhite = Fields[i].IsWhite;
             int oneFromLastRow = isWhite ? 7 : 1;
-            int firstLine = isWhite ? 1 : 7;
             int sign = isWhite ? 1 : -1;
 
 
@@ -276,8 +338,8 @@ namespace ChEngine
                 {
                     yield return new Move(i, nextField, TypeOfMove.Move);
 
-                    // can jump 2 times if both are free and has not moved yet
-                    if (rowNum == firstLine)
+                    // can jump 2 times if both are free and is on first pawn line
+                    if (rowNum == (isWhite ? 1 : 7))
                     {
                         nextField = nextField + sign * 8;
                         if (Fields[nextField].Figure == TypeOfFigure.EMPTY)
@@ -285,6 +347,8 @@ namespace ChEngine
                     }
                 }
             }
+
+            int enPassantRow = isWhite ? 4 : 3;
 
             // Can take diagonally left
             int colNum = i % 8;
@@ -300,9 +364,10 @@ namespace ChEngine
                 {
                     if (rowNum != oneFromLastRow)
                     {
+                        // normal move forward
                         yield return new Move(i, dest, TypeOfMove.Take);
                     }
-                    // And promote if last line
+                    // promote if last line
                     else
                     {
                         yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteBishop);
@@ -311,6 +376,10 @@ namespace ChEngine
                         yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
                     }
                 }
+
+                // Check en passant
+                if ((rowNum == enPassantRow) && PlayerOptions[CurrentPlayerId()].CheckEnpassantOnCol(colNum - 1))
+                    yield return new Move(i, dest, TypeOfMove.Take);
             }
 
             // and right
@@ -337,10 +406,14 @@ namespace ChEngine
                         yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
                     }
                 }
+
+                // Check en passant
+                if ((rowNum == enPassantRow) && PlayerOptions[CurrentPlayerId()].CheckEnpassantOnCol(colNum + 1))
+                    yield return new Move(i, dest, TypeOfMove.Take);
             }
         }
 
-        private IEnumerable<Move> KinglikeMoves(int i)
+        private IEnumerable<Move> KingMoves(int i)
         {
             // There are 8 configurations
             List<Point> vectors = new List<Point>() {
@@ -473,7 +546,6 @@ namespace ChEngine
                     yield return new Move(i, index, TypeOfMove.Take);
             }
         }
-
 
         private IEnumerable<Move> BishoplikeMoves(int i)
         {
@@ -671,5 +743,24 @@ namespace ChEngine
             LegalMoves = null;
             Evaluation = null;
         }
+    }
+
+    public struct PlayerOption
+    {
+        public byte EnPassantOptions;
+        public bool KingsideCastle;
+        public bool QueensideCastle;
+
+        public static readonly PlayerOption DefautOption = new PlayerOption() { EnPassantOptions = 0, KingsideCastle = true, QueensideCastle = true };
+
+
+        // set bit number colNumber
+        public void GiveEnpassantOnCol(int colNumber) => EnPassantOptions = (byte)(EnPassantOptions | (1 << colNumber));
+
+        // Clear all bits
+        public void ClearEnpassant() => EnPassantOptions = 0;
+
+        // test bit
+        public bool CheckEnpassantOnCol(int colNumber) => (EnPassantOptions & (1 << colNumber)) != 0;
     }
 }

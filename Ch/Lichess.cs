@@ -92,27 +92,22 @@ namespace Ch
             var task = client.GetStringAsync(uri);
 
             // wait up till one second
-            bool taskReady;
+            string taskError = string.Empty;
             try
             {
-                taskReady = task.Wait(1000);
+                if (task.Wait(1000))
+                    return task.Result;
+                else return null;
             }
             catch (AggregateException ex)
             {
-                Console.WriteLine(ex.Message);
-                taskReady = false;
-            }
+                NotifyConnectionError(ex.Message);
 
-            if (!taskReady)
-            {
-                NotifyConnectionError();
-                return "";
+                return null;
             }
-
-            return task.Result;
         }
 
-        private T HttpGet<T>(string uri) => JsonConvert.DeserializeObject<T>(HttpGet(uri));
+        private T HttpGet<T>(string uri) => JsonConvert.DeserializeObject<T>(HttpGet(uri) ?? "");
 
         private void HttpPost(string uri, HttpContent content)
         {
@@ -139,15 +134,11 @@ namespace Ch
             }
             catch (WebException webEx)
             {
-                if (webEx.Status == WebExceptionStatus.Timeout)
-                {
-                    // Wait for internet
-                    NotifyConnectionError();
 
-                    return;
-                }
+                // Wait for internet
+                NotifyConnectionError(webEx.Message);
 
-                throw;
+                return;
             }
 
             var responseStream = webResponse.GetResponseStream();
@@ -167,7 +158,7 @@ namespace Ch
             }
         }
 
-        private static void NotifyConnectionError()
+        private static void NotifyConnectionError(string message)
         {
             Console.Write("Connection not ok");
             for (int i = 0; i < 10; i++)

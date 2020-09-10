@@ -25,26 +25,30 @@ namespace ChEngine
             string promotionSuffix = move.Promotion == TypeOfPromotion.NoPromotion ? "" : ((char)move.Promotion).ToString();
             return move.Type switch
             {
-                TypeOfMove.Move => IToStr(move.From) + IToStr(move.To) + promotionSuffix,
-                TypeOfMove.Take => IToStr(move.From) + IToStr(move.To) + promotionSuffix,
+                TypeOfMove.Move => IndexToUCI(move.From) + IndexToUCI(move.To) + promotionSuffix,
+                TypeOfMove.Take => IndexToUCI(move.From) + IndexToUCI(move.To) + promotionSuffix,
                 TypeOfMove.CastleKingside => "0-0",
                 TypeOfMove.CastleQueenside => "0-0-0",
                 _ => throw new NotImplementedException(),
             };
 
         }
-        public static string IToStr(int index) => new string(new char[] { (char)((index % 8) + 'a'), (char)((index / 8) + '1') });
+
+        public static string IndexToUCI(int index) => new string(new char[] { (char)((index % 8) + 'a'), (char)((index / 8) + '1') });
+
+        public static int UCIToIndex(string a1) => UCIToIndex(a1[0], a1[1]);
+        public static int UCIToIndex(char col, char row) => (col - 'a') + 8 * (row - '1');
 
         public static Move DeserializeMove(string uic)
         {
             // check format
             if (uic.Length == 4)
-                return new Move((uic[0] - 'a') + 8 * (uic[1] - '1'), (uic[2] - 'a') + 8 * (uic[3] - '1'), TypeOfMove.Move);
+                return new Move(UCIToIndex(uic[0], uic[1]), UCIToIndex(uic[2], uic[3]), TypeOfMove.Move);
 
             if (uic.Length == 5)
             {
                 if (uic[2] == 'x')
-                    return new Move((uic[0] - 'a') + 8 * (uic[1] - '1'), (uic[3] - 'a') + 8 * (uic[4] - '1'), TypeOfMove.Take);
+                    return new Move(UCIToIndex(uic[0], uic[1]), UCIToIndex(uic[3], uic[4]), TypeOfMove.Take);
 
                 TypeOfPromotion promotion = uic[4] switch
                 {
@@ -55,7 +59,7 @@ namespace ChEngine
                     _ => throw new ArgumentException("Cannot understand promotion char " + uic[4])
                 };
 
-                return new Move((uic[0] - 'a') + 8 * (uic[1] - '1'), (uic[2] - 'a') + 8 * (uic[3] - '1'), TypeOfMove.Move, promotion);
+                return new Move(UCIToIndex(uic[0], uic[1]), UCIToIndex(uic[2], uic[3]), TypeOfMove.Move, promotion);
             }
 
             throw new ArgumentException("uic has wrong length of " + uic.Length);
