@@ -36,6 +36,8 @@ namespace Ch
         /// <param name="moves">Moves space separated</param>
         public void OnNewMove(string moves)
         {
+
+
             if (IsWhite == GetWhiteToMove(moves))
             {
                 IEnumerable<Move> movesParsed = moves.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(x => UCINotation.DeserializeMove(x));

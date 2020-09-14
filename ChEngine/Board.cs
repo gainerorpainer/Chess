@@ -234,14 +234,14 @@ namespace ChEngine
                 {
                     if (CheckTemporaryCastlingCondition(kingPos, towardsKingside: true))
                         // if you got here, nice!
-                        moves.Add(new Move(4, 4 + 2, TypeOfMove.Move));
+                        moves.Add(new Move(kingPos, kingPos + 2, TypeOfMove.Move));
                 }
 
                 if (PlayerOptions[CurrentPlayerId()].QueensideCastle)
                 {
                     if (CheckTemporaryCastlingCondition(kingPos, towardsKingside: false))
                         // if you got here, nice!
-                        moves.Add(new Move(4, 4 - 2, TypeOfMove.Move));
+                        moves.Add(new Move(kingPos, kingPos - 2, TypeOfMove.Move));
                 }
             }
 
@@ -376,7 +376,7 @@ namespace ChEngine
         {
             int rowNum = i / 8;
             bool isWhite = Fields[i].IsWhite;
-            int oneFromLastRow = isWhite ? 7 : 1;
+            int oneFromLastRow = isWhite ? 6 : 1;
             int sign = isWhite ? 1 : -1;
 
 
@@ -778,11 +778,12 @@ namespace ChEngine
         public bool CheckTemporaryCastlingCondition(int kingPos, bool towardsKingside)
         {
             int sign = towardsKingside ? 1 : -1;
+            int rowOffset = (kingPos / 8) * 8; // note the integer division!
 
             // first of all, all cols to the corner must be free
-            for (int i = 4 + sign; i < 7; i++)
+            for (int i = 4 + sign; (i >= 0) && (i <= 7); i += sign)
             {
-                if (Fields[i].Figure != TypeOfFigure.EMPTY)
+                if (Fields[i + rowOffset].Figure != TypeOfFigure.EMPTY)
                     return false;
             }
 
