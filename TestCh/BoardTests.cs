@@ -63,7 +63,7 @@ namespace TestCh
         public void TestStartPositionMoves()
         {
             // in the first move, there must be the following moves available
-            List<string> firstMoves = new List<string>()
+            List<string> expectedFirstMoves = new List<string>()
             {
                 "a2a3",
                 "a2a4",
@@ -89,16 +89,16 @@ namespace TestCh
                 "g1h3"
             };
 
-            firstMoves.Sort();
+            expectedFirstMoves.Sort();
 
             Board b = new Board(Enumerable.Empty<Move>());
-            List<string> boardMoves = b.GetLegalMoves().Select(x => new UCINotation(x).ToString()).ToList();
+            List<string> legalMoves = b.GetLegalMoves().Select(x => new UCINotation(x).ToString()).ToList();
 
-            boardMoves.Sort();
+            legalMoves.Sort();
 
-            var t = firstMoves.Where(x => boardMoves.Contains(x) == false).ToList();
+            var t = expectedFirstMoves.Where(x => legalMoves.Contains(x) == false).ToList();
 
-            CollectionAssert.AreEquivalent(firstMoves, boardMoves);
+            CollectionAssert.AreEquivalent(expectedFirstMoves, legalMoves);
         }
 
         [TestMethod]

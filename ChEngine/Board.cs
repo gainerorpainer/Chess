@@ -17,8 +17,82 @@ namespace ChEngine
         public bool IsWhiteToMove;
         public readonly Cache Cache = new Cache();
 
-        public static readonly Field[] DefaultField = CreateDefaultField();
-        public static readonly PlayerOption[] DefaultPlayerOptions = new PlayerOption[] { PlayerOption.DefautOption, PlayerOption.DefautOption };
+        public static readonly Field[] DEFAULT_FIELDS = CreateDefaultField();
+        public static readonly PlayerOption[] DEFAULT_PLAYER_OPTIONS = new PlayerOption[] { PlayerOption.DefautOption, PlayerOption.DefautOption };
+        // Defines all possible knight moves based on the location
+        public static readonly int[,] KNIGHT_LOOKUP = CreateKnightLookup();
+        private static int[,] CreateKnightLookup()
+        {
+            var result = new int[2, 2]{
+                {0,1 }, {1,2}
+            };
+            result[0] = new int[] { 17, 10, -1, -1, -1, -1, -1, -1 };
+            result[1] = new int[] { 17, 10, 15, -1, -1, -1, -1, -1 };
+            result[2] = new int[] { 17, 10, 6, 15, -1, -1, -1, -1 };
+            result[3] = new int[] { 17, 10, 6, 15, -1, -1, -1, -1 };
+            result[4] = new int[] { 17, 10, 6, 15, -1, -1, -1, -1 };
+            result[5] = new int[] { 17, 10, 6, 15, -1, -1, -1, -1 };
+            result[6] = new int[] { 17, 6, 15, -1, -1, -1, -1, -1 };
+            result[7] = new int[] { 6, 15, -1, -1, -1, -1, -1, -1 };
+            result[8] = new int[] { 17, 10, -6, -1, -1, -1, -1, -1 };
+            result[9] = new int[] { 17, 10, -6, 15, -1, -1, -1, -1 };
+            result[10] = new int[] { 17, 10, -6, -10, 6, 15, -1, -1 };
+            result[11] = new int[] { 17, 10, -6, -10, 6, 15, -1, -1 };
+            result[12] = new int[] { 17, 10, -6, -10, 6, 15, -1, -1 };
+            result[13] = new int[] { 17, 10, -6, -10, 6, 15, -1, -1 };
+            result[14] = new int[] { 17, -10, 6, 15, -1, -1, -1, -1 };
+            result[15] = new int[] { -10, 6, 15, -1, -1, -1, -1, -1 };
+            result[16] = new int[] { 17, 10, -6, -15, -1, -1, -1, -1 };
+            result[17] = new int[] { 17, 10, -6, -15, -17, 15, -1, -1 };
+            result[18] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[19] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[20] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[21] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[22] = new int[] { 17, -15, -17, -10, 6, 15, -1, -1 };
+            result[23] = new int[] { -17, -10, 6, 15, -1, -1, -1, -1 };
+            result[24] = new int[] { 17, 10, -6, -15, -1, -1, -1, -1 };
+            result[25] = new int[] { 17, 10, -6, -15, -17, 15, -1, -1 };
+            result[26] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[27] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[28] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[29] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[30] = new int[] { 17, -15, -17, -10, 6, 15, -1, -1 };
+            result[31] = new int[] { -17, -10, 6, 15, -1, -1, -1, -1 };
+            result[32] = new int[] { 17, 10, -6, -15, -1, -1, -1, -1 };
+            result[33] = new int[] { 17, 10, -6, -15, -17, 15, -1, -1 };
+            result[34] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[35] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[36] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[37] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[38] = new int[] { 17, -15, -17, -10, 6, 15, -1, -1 };
+            result[39] = new int[] { -17, -10, 6, 15, -1, -1, -1, -1 };
+            result[40] = new int[] { 17, 10, -6, -15, -1, -1, -1, -1 };
+            result[41] = new int[] { 17, 10, -6, -15, -17, 15, -1, -1 };
+            result[42] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[43] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[44] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[45] = new int[] { 17, 10, -6, -15, -17, -10, 6, 15 };
+            result[46] = new int[] { 17, -15, -17, -10, 6, 15, -1, -1 };
+            result[47] = new int[] { -17, -10, 6, 15, -1, -1, -1, -1 };
+            result[48] = new int[] { 10, -6, -15, -1, -1, -1, -1, -1 };
+            result[49] = new int[] { 10, -6, -15, -17, -1, -1, -1, -1 };
+            result[50] = new int[] { 10, -6, -15, -17, -10, 6, -1, -1 };
+            result[51] = new int[] { 10, -6, -15, -17, -10, 6, -1, -1 };
+            result[52] = new int[] { 10, -6, -15, -17, -10, 6, -1, -1 };
+            result[53] = new int[] { 10, -6, -15, -17, -10, 6, -1, -1 };
+            result[54] = new int[] { -15, -17, -10, 6, -1, -1, -1, -1 };
+            result[55] = new int[] { -17, -10, 6, -1, -1, -1, -1, -1 };
+            result[56] = new int[] { -6, -15, -1, -1, -1, -1, -1, -1 };
+            result[57] = new int[] { -6, -15, -17, -1, -1, -1, -1, -1 };
+            result[58] = new int[] { -6, -15, -17, -10, -1, -1, -1, -1 };
+            result[59] = new int[] { -6, -15, -17, -10, -1, -1, -1, -1 };
+            result[60] = new int[] { -6, -15, -17, -10, -1, -1, -1, -1 };
+            result[61] = new int[] { -6, -15, -17, -10, -1, -1, -1, -1 };
+            result[62] = new int[] { -15, -17, -10, -1, -1, -1, -1, -1 };
+            result[63] = new int[] { -17, -10, -1, -1, -1, -1, -1, -1 };
+            return result;
+        }
+
         private static Field[] CreateDefaultField()
         {
             var result = new Field[8 * 8];
@@ -60,14 +134,15 @@ namespace ChEngine
             return result;
         }
 
+
         private Board()
         { }
 
         public Board(IEnumerable<Move> moves)
         {
-            Fields = (Field[])DefaultField.Clone();
+            Fields = (Field[])DEFAULT_FIELDS.Clone();
             IsWhiteToMove = true;
-            PlayerOptions = (PlayerOption[])DefaultPlayerOptions.Clone();
+            PlayerOptions = (PlayerOption[])DEFAULT_PLAYER_OPTIONS.Clone();
 
             // Apply all mutations
             foreach (var move in moves)
@@ -170,7 +245,6 @@ namespace ChEngine
                     Fields[move.From].Figure = TypeOfFigure.EMPTY;
 
                     // Check destination
-                    Field figureTo = Fields[move.To];
                     Fields[move.To] = figureFrom;
                     break;
 
@@ -399,7 +473,7 @@ namespace ChEngine
                     // can jump 2 times if both are free and is on first pawn line
                     if (rowNum == (isWhite ? 1 : 7))
                     {
-                        nextField = nextField + sign * 8;
+                        nextField += sign * 8;
                         if (Fields[nextField].Figure == TypeOfFigure.EMPTY)
                             yield return new Move(i, nextField, TypeOfMove.Move);
                     }
@@ -530,78 +604,15 @@ namespace ChEngine
             }
         }
 
-        private IEnumerable<Move> KnightlikeMoves(int i)
+        private IEnumerable<Move> KnightlikeMoves(int from)
         {
-            // There are 8 configurations
-            List<Point> vectors = new List<Point>() {
-                new Point(1, 2),
-                new Point(2, 1),
-                new Point(2, -1),
-                new Point(1, -2),
-                new Point(-1, -2),
-                new Point(-2, -1),
-                new Point(-2, 1),
-                new Point(-1, 2),
-            };
-
-            int colNumber = i % 8;
-            int rowNumber = i / 8;
-
-            // check to right / left
-            switch (colNumber)
+            // iterate over possibilities
+            foreach (var index in LOOKUP_KNIGHTMOVES[from])
             {
-                case 0:
-                    // remove all possibilites that go left at all
-                    vectors.RemoveAll(x => x.X < 0);
-                    break;
-                case 1:
-                    // remove all possibilites to go left 2 times
-                    vectors.RemoveAll(x => x.X == -2);
-                    break;
-                case 6:
-                    // remove all possibilites to go right 2 times
-                    vectors.RemoveAll(x => x.X == 2);
-                    break;
-                case 7:
-                    // remove all possibilites that go right at all 
-                    vectors.RemoveAll(x => x.X > 0);
-                    break;
-                default:
-                    break;
-            }
-
-            // check to top / bottom
-            switch (rowNumber)
-            {
-                case 0:
-                    // remove all possibilites that go bottom at all
-                    vectors.RemoveAll(x => x.Y < 0);
-                    break;
-                case 1:
-                    // remove all possibilites to go bottom 2 times
-                    vectors.RemoveAll(x => x.Y == -2);
-                    break;
-                case 6:
-                    // remove all possibilites to go top 2 times
-                    vectors.RemoveAll(x => x.Y == 2);
-                    break;
-                case 7:
-                    // remove all possibilites that go top at all 
-                    vectors.RemoveAll(x => x.Y > 0);
-                    break;
-                default:
-                    break;
-            }
-
-            // iterate over leftovers
-            foreach (var vec in vectors)
-            {
-                int index = i + vec.X + (vec.Y * 8);
-
                 if (Fields[index].Figure == TypeOfFigure.EMPTY)
-                    yield return new Move(i, index, TypeOfMove.Move);
+                    yield return new Move(from, index, TypeOfMove.Move);
                 else if (Fields[index].IsWhite ^ IsWhiteToMove)
-                    yield return new Move(i, index, TypeOfMove.Take);
+                    yield return new Move(from, index, TypeOfMove.Take);
             }
         }
 
@@ -781,7 +792,7 @@ namespace ChEngine
             int rowOffset = (kingPos / 8) * 8; // note the integer division!
 
             // first of all, all cols to the corner must be free
-            for (int i = 4 + sign; (i >= 0) && (i <= 7); i += sign)
+            for (int i = 4 + sign; (i > 0) && (i < 7); i += sign)
             {
                 if (Fields[i + rowOffset].Figure != TypeOfFigure.EMPTY)
                     return false;
