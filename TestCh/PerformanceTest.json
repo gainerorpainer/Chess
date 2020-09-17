@@ -1,8 +1,1 @@
-{
-  "Date": "2020-09-16T22:47:02.2754138+02:00",
-  "Depth": 3,
-  "Nodes": 460824,
-  "Evaluation": 0.0,
-  "Duration": "00:00:05.5782590",
-  "NodesPerSecond": 82610
-}
+{"Date":"2020-09-17T14:02:05.4623049+02:00","Depth":3,"Nodes":766005,"Evaluation":1.0,"Duration":"00:00:05.4110409","NodesPerSecond":141563}

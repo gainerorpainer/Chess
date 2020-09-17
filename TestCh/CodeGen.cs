@@ -16,18 +16,18 @@ namespace TestCh
         {
             // There are 8 configurations
             List<Point> baseVector = new List<Point>() {
-                new Point(1, 2),
-                new Point(2, 1),
-                new Point(2, -1),
-                new Point(1, -2),
-                new Point(-1, -2),
                 new Point(-2, -1),
                 new Point(-2, 1),
+                new Point(-1, -2),
                 new Point(-1, 2),
+                new Point(1, -2),
+                new Point(1, 2),
+                new Point(2, -1),
+                new Point(2, 1),
             };
 
             // Result is a vector which associates up to 8 possible moves to a board location. 
-            int[,] result = new int[8 * 8, 8];
+            int[][] result = new int[8 * 8][];
 
             for (int rowNumber = 0; rowNumber < 8; rowNumber++)
             {
@@ -82,34 +82,24 @@ namespace TestCh
                     }
 
                     // copy to result
-                    // -1 is end of collection by convention
-                    for (int i = 0; i < 8; i++)
-                    {
-                        int index = 8 * rowNumber + colNumber;
-                        result[index, i] =
-                            i < vectors.Count ?
-                                vectors[i].X + (vectors[i].Y * 8)
-                            :
-                                -1;
-
-                    }
+                    int index = colNumber + 8 * rowNumber;
+                    result[index] = vectors.Select(x => index + x.X + 8 * x.Y).ToArray();
                 }
 
             }
 
             // Serialize result
 
-            string arr = "public static readonly int[,] KNIGHT_LOOKUP = CreateKnightLookup();";
+            string arr = "public static readonly int[][] LOOKUP_KNIGHTMOVES = CreateKnightLookup();";
             arr += Environment.NewLine;
-            arr += "private static int[,] CreateKnightLookup() " + Environment.NewLine + "{" + Environment.NewLine;
-            arr += "var result = new int[8*8,8];";
+            arr += "private static int[][] CreateKnightLookup() " + Environment.NewLine + "{" + Environment.NewLine;
+            arr += "var result = new int[8*8][];" + Environment.NewLine;
             for (int i = 0; i < 8 * 8; i++)
             {
-                arr += $"result[{i}] = new int[] {{ ";
-                arr += string.Join(", ", Enumerable.Range(0, 8).Select(x => result[i, x]));
-                arr += " };" + Environment.NewLine;
+                arr += $"result[{i}] = new int[] {{";
+                arr += string.Join(", ", result[i]);
+                arr += "};" + Environment.NewLine;
             }
-
 
             arr += "return result;";
             arr += '}';
