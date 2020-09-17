@@ -13,6 +13,8 @@ namespace TestCh
     [TestClass()]
     public class PerformanceTest
     {
+
+#if !DEBUG
         [TestMethod()]
         public void TestStartPositionPerformance()
         {
@@ -35,9 +37,11 @@ namespace TestCh
 
             // copy to file
             string path = Directory.GetParent(Directory.GetCurrentDirectory()).Parent.Parent.FullName;
-            path = Path.Combine(path, "PerformanceTest.json");
+            path = Path.Combine(path, $"PerformanceTest.json");
             File.WriteAllText(path, resultJson);
         }
+#endif
+
     }
 
     public class PerformanceTestModel
