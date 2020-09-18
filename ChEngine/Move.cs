@@ -1,6 +1,5 @@
 ﻿namespace ChEngine
 {
-
     public struct Move
     {
         public int From;
@@ -16,6 +15,11 @@
             To = to;
             Type = moveType;
             Promotion = promotion;
+        }
+
+        public override string ToString()
+        {
+            return $"{From}:{To} {Type} ({Promotion})";
         }
     }
 }

@@ -29,9 +29,9 @@ namespace TestCh
             string resultJson = JsonConvert.SerializeObject(new PerformanceTestModel()
             {
                 Date = DateTime.Now,
-                Depth = e.Statistics.MaxDepth,
-                Nodes = e.Statistics.NodesVisited,
-                Evaluation = e.Statistics.Evaluation,
+                Depth = InterlockedEngineStats.Statistics.MaxDepth,
+                Nodes = InterlockedEngineStats.Statistics.NodesVisited,
+                Evaluation = InterlockedEngineStats.Statistics.Evaluation,
                 Duration = stopwatch.Elapsed,
             });
 

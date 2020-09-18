@@ -85,14 +85,13 @@ namespace Ch
         }
 
 
-        private string HttpGet(string uri)
+        private static string HttpGet(string uri)
         {
             HttpClient client = GetClient();
 
             var task = client.GetStringAsync(uri);
 
             // wait up till one second
-            string taskError = string.Empty;
             try
             {
                 if (task.Wait(1000))
@@ -109,7 +108,7 @@ namespace Ch
 
         private T HttpGet<T>(string uri) => JsonConvert.DeserializeObject<T>(HttpGet(uri) ?? "");
 
-        private void HttpPost(string uri, HttpContent content)
+        private static void HttpPost(string uri, HttpContent content)
         {
             HttpClient client = GetClient();
 
@@ -160,7 +159,7 @@ namespace Ch
 
         private static void NotifyConnectionError(string message)
         {
-            Console.Write("Connection not ok");
+            Console.Write("Connection not ok: " + message);
             for (int i = 0; i < 10; i++)
             {
                 Console.Write('.');

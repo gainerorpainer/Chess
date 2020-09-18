@@ -37,26 +37,6 @@ namespace TestCh
             //Assert.AreSame(originalFieldBefore, originalFieldAfter);
             Assert.IsTrue(originalFieldBefore.GetType().IsValueType);
             Assert.AreEqual(originalFieldBefore, originalFieldAfter);
-
-            // redo copy
-            copy = (Board)original.Clone();
-
-            // Test cache semantics
-            copy.GetEvaluation();
-            copy.GetLegalMoves();
-
-            Assert.AreEqual(original, copy);
-        }
-
-        [TestMethod]
-        public void TestStatics()
-        {
-            // Weighting
-            Board freshBoard = new Board(Enumerable.Empty<Move>());
-            double whiteEvaluation = freshBoard.Fields.Where(x => x.Figure != TypeOfFigure.EMPTY && x.IsWhite == true).Sum(x => Board.Weighting(x.Figure));
-            double blackEvaluation = freshBoard.Fields.Where(x => x.Figure != TypeOfFigure.EMPTY && x.IsWhite == false).Sum(x => Board.Weighting(x.Figure));
-            Assert.AreEqual(whiteEvaluation, blackEvaluation);
-            Assert.AreEqual(whiteEvaluation, 8 * 1 + 1 * 9 + 2 * 5 + 2 * 3 + 2 * 3 + 50);
         }
 
         [TestMethod]

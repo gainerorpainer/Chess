@@ -13,8 +13,6 @@ namespace ChEngine
         public bool IsWhite { get; set; }
         public int MaxDepth { get; set; } = 1;
 
-        public EngineStatistics Statistics => InterlockedEngineStats.Statistics;
-
         private const double BEST_SCORE = double.MaxValue;
         private const double WORST_SCORE = -BEST_SCORE;
         private CancellationTokenSource cancellationTokenSource;
@@ -123,7 +121,7 @@ namespace ChEngine
 
             // End of recursion
             if (node.Children.Count == 0)
-                return node.Board.GetEvaluation();
+                return Evaluation.GetEvaluation(node.Board.Fields);
 
             // Assume worst evaluation
             double sign = GetSign(node.Board.IsWhiteToMove);

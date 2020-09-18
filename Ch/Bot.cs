@@ -36,13 +36,11 @@ namespace Ch
         /// <param name="moves">Moves space separated</param>
         public void OnNewMove(string moves)
         {
-
-
             if (IsWhite == GetWhiteToMove(moves))
             {
                 IEnumerable<Move> movesParsed = moves.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(x => UCINotation.DeserializeMove(x));
                 Move bestMove = Engine.ReactToMove(movesParsed);
-                ReportAction($"Depth={Engine.Statistics.MaxDepth}, Nodes={Engine.Statistics.NodesVisited}, Evaluation={Engine.Statistics.Evaluation}");
+                ReportAction($"Depth={InterlockedEngineStats.Statistics.MaxDepth}, Nodes={InterlockedEngineStats.Statistics.NodesVisited}, Evaluation={InterlockedEngineStats.Statistics.Evaluation}");
                 MoveAction(bestMove);
             }
 
