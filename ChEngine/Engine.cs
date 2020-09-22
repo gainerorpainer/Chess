@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
@@ -11,7 +12,7 @@ namespace ChEngine
     public class Engine
     {
         public bool IsWhite { get; set; }
-        public int MaxDepth { get; set; } = 1;
+        public int MaxDepth { get; set; } = 3;
 
         private const double BEST_SCORE = double.MaxValue;
         private const double WORST_SCORE = -BEST_SCORE;
@@ -26,7 +27,7 @@ namespace ChEngine
         {
             // Make a move within the next 3 seconds
             cancellationTokenSource = new CancellationTokenSource();
-            cancellationTokenSource.CancelAfter(5000);
+            cancellationTokenSource.CancelAfter(60000);
             //cancellationTokenSource.Cancel();
 
             var initialBoard = new Board(moves);
@@ -89,6 +90,9 @@ namespace ChEngine
                 // swap
                 lastTreeLayer = newTreeLayer;
 
+                if (depth >= MaxDepth)
+                    break;
+
             } while (!cancellationTokenSource.IsCancellationRequested);
 
             // Traverse tree
@@ -96,46 +100,84 @@ namespace ChEngine
             Move bestMove = gameTree.First().Move;
             foreach (var candidate in gameTree)
             {
+                //if (UCINotation.SerializeMove(candidate.Move) == "a3b5")
+                //{
+                //    sw.Close();
+                //    sw = new StreamWriter("test.txt");
+                //}
+
                 double deepEvaluation = RecursiveEvaluateNode(candidate);
                 if (Sign(deepEvaluation) > Sign(bestScore))
                 {
                     bestScore = deepEvaluation;
                     bestMove = candidate.Move;
                 }
+
+
+                //if (UCINotation.SerializeMove(candidate.Move) == "a3b5")
+                //{
+                //    sw.Flush();
+                //    sw.Close();
+
+                //    // turn file upside down
+                //    File.WriteAllLines("test.txt", File.ReadAllLines("test.txt").Reverse());
+                //}
             }
+
+            sw.Flush();
+            sw.Close();
+
+            // turn file upside down
+            File.WriteAllLines("test.txt", File.ReadAllLines("test.txt").Reverse());
 
             InterlockedEngineStats.Set_Evaluation(bestScore);
 
             return bestMove;
         }
 
+
+        StreamWriter sw = new StreamWriter("test.txt");
+
         /// <summary>
         /// Recursively searches a tree node and gives the evaluation for this node assuming best play for each player
         /// </summary>
         /// <param name="node">Current node</param>
         /// <returns>Evaluation (pos: white advantage)</returns>
-        private double RecursiveEvaluateNode(TreeNode node)
+        private double RecursiveEvaluateNode(TreeNode node, int depth = 0)
         {
 
             InterlockedEngineStats.Increment_NodesVisited();
 
             // End of recursion
             if (node.Children.Count == 0)
-                return Evaluation.GetEvaluation(node.Board.Fields);
-
-            // Assume worst evaluation
-            double sign = GetSign(node.Board.IsWhiteToMove);
-            double bestScore = sign * WORST_SCORE;
-
-            // Find best evaluation
-            foreach (var childNode in node.Children)
             {
-                double score = RecursiveEvaluateNode(childNode);
-                if (sign * score > sign * bestScore)
-                    bestScore = score;
+                double eval = Evaluation.GetEvaluation(node.Board.Fields);
+
+                for (int i = 0; i < depth; i++)
+                    sw.Write('\t');
+                sw.Write(node.Board.IsWhiteToMove ? "w: " : "b: ");
+                sw.WriteLine(UCINotation.SerializeMove(node.Move) + " -> " + eval);
+
+                return eval;
             }
 
-            return bestScore;
+            // Assume that the enemy (child node) will make a best move for him
+            double enemySign = GetSign(!node.Board.IsWhiteToMove);
+            double bestEnemyMove = enemySign * WORST_SCORE;
+
+            foreach (var childNode in node.Children)
+            {
+                double enemyScore = RecursiveEvaluateNode(childNode, depth + 1);
+                if ((enemySign * enemyScore) > (enemySign * bestEnemyMove))
+                    bestEnemyMove = enemyScore;
+            }
+
+            for (int i = 0; i < depth; i++)
+                sw.Write('\t');
+            sw.Write(node.Board.IsWhiteToMove ? "w: " : "b: ");
+            sw.WriteLine(UCINotation.SerializeMove(node.Move) + " -> " + bestEnemyMove);
+
+            return bestEnemyMove;
         }
 
         /// <summary>
