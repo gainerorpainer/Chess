@@ -69,16 +69,17 @@ namespace ChEngine
 
         public void Mutate(Move move)
         {
+
+
             switch (move.Type)
             {
                 case TypeOfMove.Move:
                 case TypeOfMove.Take:
-
                     // Pick piece
-                    Field figureFrom = Fields[move.From];
+                    Field fromField = Fields[move.From];
 
                     // This could be special move (king castles) or lose the right to castle
-                    if (figureFrom.Figure == TypeOfFigure.King)
+                    if (fromField.Figure == TypeOfFigure.King)
                     {
                         // this will lose the right to castle always
                         PlayerOptions[CurrentPlayerId()].KingsideCastle = PlayerOptions[CurrentPlayerId()].QueensideCastle = false;
@@ -107,14 +108,14 @@ namespace ChEngine
                     }
 
                     // this could be special move pawn long jump
-                    if ((figureFrom.Figure == TypeOfFigure.Pawn) && (Math.Abs(move.From - move.To) == 2 * 8))
+                    if ((fromField.Figure == TypeOfFigure.Pawn) && (Math.Abs(move.From - move.To) == 2 * 8))
                     {
                         // add a en passant taking option for the enemy
                         PlayerOptions[OtherPlayerId()].GiveEnpassantOnCol(move.From % 8);
                     }
 
                     // this rook move could loose the right to castle
-                    if (figureFrom.Figure == TypeOfFigure.Rook)
+                    if (fromField.Figure == TypeOfFigure.Rook)
                     {
                         // this can overwrite multiple times, which is not bad just maybe not optimal
                         int colNum = move.From % 8;
@@ -127,8 +128,22 @@ namespace ChEngine
                     // remove from
                     Fields[move.From].Figure = TypeOfFigure.EMPTY;
 
-                    // Check destination
-                    Fields[move.To] = figureFrom;
+                    // store color at destination
+                    Fields[move.To].IsWhite = fromField.IsWhite;
+
+                    // Alter figure type considering promoted
+                    var typeAfterPromotion = move.Promotion switch
+                    {
+                        TypeOfPromotion.NoPromotion => fromField.Figure,
+                        TypeOfPromotion.PromoteKnight => TypeOfFigure.Knight,
+                        TypeOfPromotion.PromoteBishop => TypeOfFigure.Bishop,
+                        TypeOfPromotion.PromoteRook => TypeOfFigure.Rook,
+                        TypeOfPromotion.PromoteQueen => TypeOfFigure.Queen,
+                        _ => throw new NotImplementedException()
+                    };
+
+                    Fields[move.To].Figure = typeAfterPromotion;
+
                     break;
 
                 case TypeOfMove.NullMove:
@@ -138,26 +153,8 @@ namespace ChEngine
                     throw new NotImplementedException();
             }
 
-            switch (move.Promotion)
-            {
-                case TypeOfPromotion.NoPromotion:
-                    break;
 
-                case TypeOfPromotion.PromoteKnight:
-                case TypeOfPromotion.PromoteBishop:
-                case TypeOfPromotion.PromoteRook:
-                case TypeOfPromotion.PromoteQueen:
-                    // Get type
-                    var pieceType = (TypeOfFigure)move.Promotion;
 
-                    // place piece there
-                    Fields[move.To].Figure = pieceType;
-
-                    break;
-
-                default:
-                    throw new NotImplementedException();
-            }
 
             // Revoke all options for en passant
             PlayerOptions[CurrentPlayerId()].ClearEnpassant();

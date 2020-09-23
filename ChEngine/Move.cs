@@ -19,7 +19,7 @@
 
         public override string ToString()
         {
-            return $"{From}:{To} {Type} ({Promotion})";
+            return $"{From}:{To} \"{Type}\" ({Promotion})";
         }
     }
 }

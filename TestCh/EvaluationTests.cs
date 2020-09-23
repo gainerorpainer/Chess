@@ -8,7 +8,7 @@ using System.Text;
 namespace TestCh
 {
     [TestClass]
-    public class TestEvaluation
+    public class EvaluationTests
     {
         [TestMethod]
         public void TestGetEvaluation()
@@ -19,7 +19,7 @@ namespace TestCh
             double blackEvaluation = freshBoard.Fields.Where(x => x.Figure != TypeOfFigure.EMPTY && x.IsWhite == false).Sum(x => Evaluation.Weighting(x.Figure));
             Assert.AreEqual(whiteEvaluation, blackEvaluation);
             Assert.AreEqual(whiteEvaluation, 8 * 1 + 1 * 9 + 2 * 5 + 2 * 3 + 2 * 3 + 50);
-            Assert.AreEqual(0, Evaluation.GetEvaluation(freshBoard.Fields));
+            Assert.AreEqual(0, Evaluation.GetEvaluation(freshBoard));
         }
     }
 }

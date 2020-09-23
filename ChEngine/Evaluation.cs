@@ -21,12 +21,12 @@ namespace ChEngine
             };
         }
 
-        public static double GetEvaluation(IEnumerable<Field> fields)
+        public static double GetEvaluation(Board board)
         {
             // simply count pieces
             double score = 0;
 
-            foreach (var field in fields)
+            foreach (var field in  board.Fields)
                 score += Weighting(field.Figure) * (field.IsWhite ? 1 : -1);
 
             return score;
