@@ -309,102 +309,106 @@ namespace ChEngine
             return -1;
         }
 
-        private IEnumerable<Move> PawnMoves(int i)
+        private IEnumerable<Move> PawnMoves(int from)
         {
-            int rowNum = i / 8;
-            bool isWhite = Fields[i].IsWhite;
-            int oneFromLastRow = isWhite ? 6 : 1;
-            int sign = isWhite ? 1 : -1;
+            int rowNum = from / 8;
+            bool isWhite = Fields[from].IsWhite;
+            bool onPromotionRow = rowNum == (isWhite ? 6 : 1);
+            int nextRowVector = isWhite ? 8 : -8;
 
 
             // can go one up if free
-            int nextField = i + sign * 8;
+            int nextField = from + nextRowVector;
             if (Fields[nextField].Figure == TypeOfFigure.EMPTY)
             {
-                if (rowNum == oneFromLastRow)
+                if (!onPromotionRow)
                 {
-                    // promote if last line
-                    yield return new Move(i, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteBishop);
-                    yield return new Move(i, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteKnight);
-                    yield return new Move(i, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteQueen);
-                    yield return new Move(i, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
-                }
-                else
-                {
-                    yield return new Move(i, nextField, TypeOfMove.Move);
+                    yield return new Move(from, nextField, TypeOfMove.Move);
 
                     // can jump 2 times if both are free and is on first pawn line
                     if (rowNum == (isWhite ? 1 : 7))
                     {
-                        nextField += sign * 8;
+                        nextField += nextRowVector;
                         if (Fields[nextField].Figure == TypeOfFigure.EMPTY)
-                            yield return new Move(i, nextField, TypeOfMove.Move);
+                            yield return new Move(from, nextField, TypeOfMove.Move);
                     }
+                }
+                else
+                {
+                    // promote if last line
+                    yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteBishop);
+                    yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteKnight);
+                    yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteQueen);
+                    yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
                 }
             }
 
-            int enPassantRow = isWhite ? 4 : 3;
+            bool onEnPassantRow = rowNum == (isWhite ? 4 : 3);
 
-            // Can take diagonally left
-            int colNum = i % 8;
+            // Can take diagonally left if not empty and other color
+            int colNum = from - rowNum * 8;  // avoid having to divide here!
             if (colNum > 0)
             {
                 // note, this is left regardless if black or white!
-                int dest = i - 1 + sign * 8;
-                if (
-                    (Fields[dest].Figure != TypeOfFigure.EMPTY)
-                    &&
-                    (Fields[dest].IsWhite != IsWhiteToMove)
-                )
+                nextField = from - 1 + nextRowVector;
+                if (Fields[nextField].Figure != TypeOfFigure.EMPTY)
                 {
-                    if (rowNum != oneFromLastRow)
+                    if (Fields[nextField].IsWhite != IsWhiteToMove)
                     {
-                        // normal move forward
-                        yield return new Move(i, dest, TypeOfMove.Take);
-                    }
-                    // promote if last line
-                    else
-                    {
-                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteBishop);
-                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteKnight);
-                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteQueen);
-                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
+                        if (!onPromotionRow)
+                        {
+                            // normal move forward
+                            yield return new Move(from, nextField, TypeOfMove.Take);
+                        }
+                        // promote if last line
+                        else
+                        {
+                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteBishop);
+                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteKnight);
+                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteQueen);
+                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
+                        }
                     }
                 }
+                else
+                {
+                    // could still work with en passant
+                    if (onEnPassantRow && PlayerOptions[CurrentPlayerId()].CheckEnpassantOnCol(colNum - 1))
+                        yield return new Move(from, nextField, TypeOfMove.Take);
+                }
 
-                // Check en passant
-                if ((rowNum == enPassantRow) && PlayerOptions[CurrentPlayerId()].CheckEnpassantOnCol(colNum - 1))
-                    yield return new Move(i, dest, TypeOfMove.Take);
+
             }
 
             // and right
             if (colNum < 7)
             {
                 // Note: this is right regardless if black or white
-                int dest = i + 1 + sign * 8;
-                if (
-                    (Fields[dest].Figure != TypeOfFigure.EMPTY)
-                    &&
-                    (Fields[dest].IsWhite != IsWhiteToMove)
-                )
+                nextField = from + 1 + nextRowVector;
+                if (Fields[nextField].Figure != TypeOfFigure.EMPTY)
                 {
-                    if (rowNum != oneFromLastRow)
+                    if (Fields[nextField].IsWhite != IsWhiteToMove)
                     {
-                        yield return new Move(i, dest, TypeOfMove.Take);
-                    }
-                    // And promote if last line
-                    else
-                    {
-                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteBishop);
-                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteKnight);
-                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteQueen);
-                        yield return new Move(i, dest, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
+                        if (!onPromotionRow)
+                        {
+                            yield return new Move(from, nextField, TypeOfMove.Take);
+                        }
+                        // And promote if last line
+                        else
+                        {
+                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteBishop);
+                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteKnight);
+                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteQueen);
+                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
+                        }
                     }
                 }
-
-                // Check en passant
-                if ((rowNum == enPassantRow) && PlayerOptions[CurrentPlayerId()].CheckEnpassantOnCol(colNum + 1))
-                    yield return new Move(i, dest, TypeOfMove.Take);
+                else
+                {
+                    // could still work with en passant
+                    if (onEnPassantRow && PlayerOptions[CurrentPlayerId()].CheckEnpassantOnCol(colNum + 1))
+                        yield return new Move(from, nextField, TypeOfMove.Take);
+                }
             }
         }
 

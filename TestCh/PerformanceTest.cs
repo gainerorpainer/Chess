@@ -42,6 +42,78 @@ namespace TestCh
         }
 #endif
 
+        [TestMethod]
+        public void TestColNumberAvoidDivide()
+        {
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            List<int> rows = new List<int>(2000000);
+            List<int> cols = new List<int>(2000000);
+            Random rng = new Random();
+
+            for (int i = 0; i < 500000; i++)
+            {
+                int from = rng.Next(0, 8 * 8);
+                int rownumber = from / 8;
+                int colnumer = from % 8;
+
+                rows.Add(rownumber);
+                cols.Add(colnumer);
+            }
+
+            Trace.WriteLine(stopwatch.ElapsedMilliseconds);
+            stopwatch.Restart();
+
+            for (int i = 0; i < 500000; i++)
+            {
+                int from = rng.Next(0, 8 * 8);
+                int rownumber = from / 8;
+                int colnumer = from - rownumber * 8;
+
+                rows.Add(rownumber);
+                cols.Add(colnumer);
+            }
+            Trace.WriteLine(stopwatch.ElapsedMilliseconds);
+
+            Trace.WriteLine(rows.Average() + cols.Average());
+        }
+
+
+        [TestMethod]
+        public void TestForVsForeach()
+        {
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            List<int> data = new List<int>(2000000);
+
+            for (int i = 0; i < 10000; i++)
+            {
+                for (int j = 0; j < 8 * 8; j++)
+                {
+                    data.Add(i + j);
+                }
+            }
+
+            Trace.WriteLine(stopwatch.ElapsedMilliseconds);
+
+            var list = Enumerable.Range(0, 8 * 8).ToList();
+
+            stopwatch.Restart();
+
+            for (int i = 0; i < 10000; i++)
+            {
+                foreach (var j in list)
+                {
+                    data.Add(i + j);
+                }
+            }
+
+            Trace.WriteLine(stopwatch.ElapsedMilliseconds);
+
+            Trace.WriteLine(data.Average());
+        }
+
+
     }
 
     public class PerformanceTestModel
