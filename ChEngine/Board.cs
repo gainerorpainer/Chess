@@ -1,4 +1,5 @@
-﻿using System;
+﻿using FenParser.Models;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -17,6 +18,8 @@ namespace ChEngine
         public Field[] Fields;
         public PlayerOption[] PlayerOptions;
         public bool IsWhiteToMove;
+        public int HalfmoveCounter;
+        public int MoveCounter;
 
         private Board()
         { }
@@ -25,11 +28,74 @@ namespace ChEngine
         {
             Fields = (Field[])Rules.DEFAULT_FIELDS.Clone();
             IsWhiteToMove = true;
+            HalfmoveCounter = 0;
+            MoveCounter = 1;
             PlayerOptions = (PlayerOption[])Rules.DEFAULT_PLAYER_OPTIONS.Clone();
 
             // Apply all mutations
             foreach (var move in moves)
                 Mutate(move);
+        }
+
+        public Board(BoardStateData board)
+        {
+            // Start from empty rules
+            Fields = new Field[Rules.DEFAULT_FIELDS.Length];
+            PlayerOptions = (PlayerOption[])Rules.DEFAULT_PLAYER_OPTIONS.Clone();
+
+            // ACTIVE PLAYER:
+            IsWhiteToMove = board.ActivePlayerColor == "White";
+
+            // EN PASSANT
+            if (board.EnPassantSquare != "")
+            {
+                // get col number (EnPassantSquare is for example "c6")
+                int colNumber = board.EnPassantSquare[0] - 'a';
+
+                PlayerOptions[CurrentPlayerId()].GiveEnpassantOnCol(colNumber);
+            }
+
+            // CASTLING
+            PlayerOptions[PlayerId(isWhite: true)].KingsideCastle = board.WhiteCanKingsideCastle;
+            PlayerOptions[PlayerId(isWhite: true)].QueensideCastle = board.WhiteCanQueensideCastle;
+
+            PlayerOptions[PlayerId(isWhite: false)].KingsideCastle = board.BlackCanKingsideCastle;
+            PlayerOptions[PlayerId(isWhite: false)].QueensideCastle = board.BlackCanQueensideCastle;
+
+            // MOVE NUMBERS
+            HalfmoveCounter = board.HalfMoveCounter;
+            MoveCounter = board.FullMoveNumber;
+
+            // FIELDS
+            for (int rowReversed = 0; rowReversed < 8; rowReversed++)
+            {
+                // get to actual row (rank) number
+                int row = 7 - rowReversed;
+
+                for (int col = 0; col < 8; col++)
+                {
+                    var fenField = board.Ranks[rowReversed][col];
+
+                    // Hacky whacky isupper? method
+                    bool isWhite = fenField.ToUpperInvariant() == fenField;
+
+                    TypeOfFigure figure = fenField.ToUpperInvariant() switch
+                    {
+                        "K" => TypeOfFigure.King,
+                        "Q" => TypeOfFigure.Queen,
+                        "R" => TypeOfFigure.Rook,
+                        "N" => TypeOfFigure.Knight,
+                        "B" => TypeOfFigure.Bishop,
+                        "P" => TypeOfFigure.Pawn,
+                        " " => TypeOfFigure.EMPTY,
+                        _ => throw new NotImplementedException()
+                    };
+
+                    int index = new ColRowCoord(col, row).Index;
+                    Fields[index].IsWhite = isWhite;
+                    Fields[index].Figure = figure;
+                }
+            }
         }
 
         public object Clone()
@@ -38,7 +104,9 @@ namespace ChEngine
             {
                 Fields = (Field[])Fields.Clone(),
                 PlayerOptions = (PlayerOption[])PlayerOptions.Clone(),
-                IsWhiteToMove = IsWhiteToMove
+                IsWhiteToMove = IsWhiteToMove,
+                HalfmoveCounter = HalfmoveCounter,
+                MoveCounter = MoveCounter
             };
         }
 
@@ -46,8 +114,10 @@ namespace ChEngine
         {
             if (obj is Board b)
                 return Enumerable.SequenceEqual(b.Fields, Fields)
+                    && Enumerable.SequenceEqual(b.PlayerOptions, PlayerOptions)
                     && (b.IsWhiteToMove && IsWhiteToMove)
-                    && Enumerable.SequenceEqual(b.PlayerOptions, PlayerOptions);
+                    && (b.HalfmoveCounter == HalfmoveCounter)
+                    && (b.MoveCounter == MoveCounter);
 
             return false;
         }
@@ -55,7 +125,6 @@ namespace ChEngine
         public override int GetHashCode()
         {
             return HashCode.Combine(
-                IsWhiteToMove,
                 Enumerable.Aggregate(Fields, 0, (last, next) => HashCode.Combine(
                     last,
                     next.GetHashCode()
@@ -63,7 +132,11 @@ namespace ChEngine
                 Enumerable.Aggregate(PlayerOptions, 0, (last, next) => HashCode.Combine(
                     last,
                     next.GetHashCode()
-                )));
+                )),
+                IsWhiteToMove,
+                HalfmoveCounter,
+                MoveCounter
+                );
         }
 
 
@@ -229,8 +302,10 @@ namespace ChEngine
         /// Does not take check or pinning rules into consideration
         /// </summary>
         /// <returns></returns>
-        public IEnumerable<Move> GetMoves_IgnoreCheckRules()
+        public List<Move> GetMoves_IgnoreCheckRules()
         {
+            var result = new List<Move>();
+
             // Find each figure
             for (int i = 0; i < 8 * 8; i++)
             {
@@ -246,41 +321,35 @@ namespace ChEngine
                         break;
 
                     case TypeOfFigure.Rook:
-                        foreach (var item in RooklikeMoves(i))
-                            yield return item;
+                        result.AddRange(RooklikeMoves(i));
                         break;
 
                     case TypeOfFigure.Knight:
-                        foreach (var item in KnightlikeMoves(i))
-                            yield return item;
+                        result.AddRange(KnightlikeMoves(i));
                         break;
 
                     case TypeOfFigure.Bishop:
-                        foreach (var item in BishoplikeMoves(i))
-                            yield return item;
+                        result.AddRange(BishoplikeMoves(i));
                         break;
 
                     case TypeOfFigure.Queen:
-                        foreach (var item in RooklikeMoves(i))
-                            yield return item;
-                        foreach (var item in BishoplikeMoves(i))
-                            yield return item;
+                        result.AddRange(RooklikeMoves(i));
+                        result.AddRange(BishoplikeMoves(i));
                         break;
 
                     case TypeOfFigure.King:
-                        foreach (var item in KingMoves(i))
-                            yield return item;
+                        result.AddRange(KingMoves(i));
                         break;
 
                     case TypeOfFigure.Pawn:
-                        foreach (var item in PawnMoves(i))
-                            yield return item;
+                        result.AddRange(PawnMoves(i));
                         break;
 
                     default:
-                        break;
+                        throw new NotImplementedException();
                 }
             }
+            return result;
         }
 
         public bool GetInCheck()
@@ -309,8 +378,9 @@ namespace ChEngine
             return -1;
         }
 
-        private IEnumerable<Move> PawnMoves(int from)
+        private List<Move> PawnMoves(int from)
         {
+            var result = new List<Move>();
             int rowNum = from / 8;
             bool isWhite = Fields[from].IsWhite;
             bool onPromotionRow = rowNum == (isWhite ? 6 : 1);
@@ -323,23 +393,23 @@ namespace ChEngine
             {
                 if (!onPromotionRow)
                 {
-                    yield return new Move(from, nextField, TypeOfMove.Move);
+                    result.Add(new Move(from, nextField, TypeOfMove.Move));
 
                     // can jump 2 times if both are free and is on first pawn line
                     if (rowNum == (isWhite ? 1 : 7))
                     {
                         nextField += nextRowVector;
                         if (Fields[nextField].Figure == TypeOfFigure.EMPTY)
-                            yield return new Move(from, nextField, TypeOfMove.Move);
+                            result.Add(new Move(from, nextField, TypeOfMove.Move));
                     }
                 }
                 else
                 {
                     // promote if last line
-                    yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteBishop);
-                    yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteKnight);
-                    yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteQueen);
-                    yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
+                    result.Add(new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteBishop));
+                    result.Add(new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteKnight));
+                    result.Add(new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteQueen));
+                    result.Add(new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteRook));
                 }
             }
 
@@ -358,15 +428,15 @@ namespace ChEngine
                         if (!onPromotionRow)
                         {
                             // normal move forward
-                            yield return new Move(from, nextField, TypeOfMove.Take);
+                            result.Add(new Move(from, nextField, TypeOfMove.Take));
                         }
                         // promote if last line
                         else
                         {
-                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteBishop);
-                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteKnight);
-                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteQueen);
-                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
+                            result.Add(new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteBishop));
+                            result.Add(new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteKnight));
+                            result.Add(new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteQueen));
+                            result.Add(new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteRook));
                         }
                     }
                 }
@@ -374,7 +444,7 @@ namespace ChEngine
                 {
                     // could still work with en passant
                     if (onEnPassantRow && PlayerOptions[CurrentPlayerId()].CheckEnpassantOnCol(colNum - 1))
-                        yield return new Move(from, nextField, TypeOfMove.Take);
+                        result.Add(new Move(from, nextField, TypeOfMove.Take));
                 }
 
 
@@ -391,15 +461,15 @@ namespace ChEngine
                     {
                         if (!onPromotionRow)
                         {
-                            yield return new Move(from, nextField, TypeOfMove.Take);
+                            result.Add(new Move(from, nextField, TypeOfMove.Take));
                         }
                         // And promote if last line
                         else
                         {
-                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteBishop);
-                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteKnight);
-                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteQueen);
-                            yield return new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteRook);
+                            result.Add(new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteBishop));
+                            result.Add(new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteKnight));
+                            result.Add(new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteQueen));
+                            result.Add(new Move(from, nextField, TypeOfMove.Move, TypeOfPromotion.PromoteRook));
                         }
                     }
                 }
@@ -407,37 +477,47 @@ namespace ChEngine
                 {
                     // could still work with en passant
                     if (onEnPassantRow && PlayerOptions[CurrentPlayerId()].CheckEnpassantOnCol(colNum + 1))
-                        yield return new Move(from, nextField, TypeOfMove.Take);
+                        result.Add(new Move(from, nextField, TypeOfMove.Take));
                 }
             }
+
+            return result;
         }
 
-        private IEnumerable<Move> KingMoves(int from)
+        private List<Move> KingMoves(int from)
         {
+            var result = new List<Move>();
             // iterate over each
             foreach (var index in Rules.LOOKUP_KINGMOVES[from])
             {
                 if (Fields[index].Figure == TypeOfFigure.EMPTY)
-                    yield return new Move(from, index, TypeOfMove.Move);
+                    result.Add(new Move(from, index, TypeOfMove.Move));
                 else if (Fields[index].IsWhite ^ IsWhiteToMove)
-                    yield return new Move(from, index, TypeOfMove.Take);
+                    result.Add(new Move(from, index, TypeOfMove.Take));
             }
+
+            return result;
         }
 
-        private IEnumerable<Move> KnightlikeMoves(int from)
+        private List<Move> KnightlikeMoves(int from)
         {
+            var result = new List<Move>();
             // iterate over possibilities
             foreach (var index in Rules.LOOKUP_KNIGHTMOVES[from])
             {
                 if (Fields[index].Figure == TypeOfFigure.EMPTY)
-                    yield return new Move(from, index, TypeOfMove.Move);
+                    result.Add(new Move(from, index, TypeOfMove.Move));
                 else if (Fields[index].IsWhite ^ IsWhiteToMove)
-                    yield return new Move(from, index, TypeOfMove.Take);
+                    result.Add(new Move(from, index, TypeOfMove.Take));
             }
+
+            return result;
         }
 
-        private IEnumerable<Move> BishoplikeMoves(int i)
+        private List<Move> BishoplikeMoves(int i)
         {
+            var result = new List<Move>();
+
             // Store some vars
             int colNum = i % 8;
             int rowNum = i / 8;
@@ -455,12 +535,12 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        yield return (new Move(i, index, TypeOfMove.Take));
+                        result.Add((new Move(i, index, TypeOfMove.Take)));
 
                     break;
                 }
 
-                yield return (new Move(i, index, TypeOfMove.Move));
+                result.Add((new Move(i, index, TypeOfMove.Move)));
             }
 
             // Go left and up until you hit something
@@ -472,12 +552,12 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        yield return (new Move(i, index, TypeOfMove.Take));
+                        result.Add((new Move(i, index, TypeOfMove.Take)));
 
                     break;
                 }
 
-                yield return (new Move(i, index, TypeOfMove.Move));
+                result.Add((new Move(i, index, TypeOfMove.Move)));
             }
 
             // Go left and down until you hit something
@@ -489,12 +569,12 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        yield return (new Move(i, index, TypeOfMove.Take));
+                        result.Add((new Move(i, index, TypeOfMove.Take)));
 
                     break;
                 }
 
-                yield return (new Move(i, index, TypeOfMove.Move));
+                result.Add((new Move(i, index, TypeOfMove.Move)));
             }
 
             // Go right and down until you hit something
@@ -506,17 +586,21 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        yield return (new Move(i, index, TypeOfMove.Take));
+                        result.Add((new Move(i, index, TypeOfMove.Take)));
 
                     break;
                 }
 
-                yield return (new Move(i, index, TypeOfMove.Move));
+                result.Add((new Move(i, index, TypeOfMove.Move)));
             }
+
+            return result;
         }
 
-        private IEnumerable<Move> RooklikeMoves(int i)
+        private List<Move> RooklikeMoves(int i)
         {
+            var result = new List<Move>();
+
             // Store some vars
             int colNum = i % 8;
             int rowNum = i / 8;
@@ -531,12 +615,12 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        yield return new Move(i, index, TypeOfMove.Take);
+                        result.Add(new Move(i, index, TypeOfMove.Take));
 
                     break;
                 }
 
-                yield return new Move(i, index, TypeOfMove.Move);
+                result.Add(new Move(i, index, TypeOfMove.Move));
             }
 
             // Go left until you hit something
@@ -547,12 +631,12 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        yield return new Move(i, index, TypeOfMove.Take);
+                        result.Add(new Move(i, index, TypeOfMove.Take));
 
                     break;
                 }
 
-                yield return new Move(i, index, TypeOfMove.Move);
+                result.Add(new Move(i, index, TypeOfMove.Move));
             }
 
             // Go up until you hit something
@@ -563,12 +647,12 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        yield return new Move(i, index, TypeOfMove.Take);
+                        result.Add(new Move(i, index, TypeOfMove.Take));
 
                     break;
                 }
 
-                yield return new Move(i, index, TypeOfMove.Move);
+                result.Add(new Move(i, index, TypeOfMove.Move));
             }
 
             // go down until you hit something
@@ -579,13 +663,15 @@ namespace ChEngine
                 {
                     // if is opposite color, add as well
                     if (Fields[index].IsWhite ^ IsWhiteToMove)
-                        yield return (new Move(i, index, TypeOfMove.Take));
+                        result.Add((new Move(i, index, TypeOfMove.Take)));
 
                     break;
                 }
 
-                yield return new Move(i, index, TypeOfMove.Move);
+                result.Add(new Move(i, index, TypeOfMove.Move));
             }
+
+            return result;
         }
 
         public bool CheckTemporaryCastlingCondition(int kingPos, bool towardsKingside)

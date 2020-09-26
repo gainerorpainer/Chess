@@ -1,4 +1,5 @@
 using ChEngine;
+using FenParser;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Collections.Generic;
 using System.Data;
@@ -105,7 +106,7 @@ namespace TestCh
             Board b = new Board(new string[]
             {
                 "f2f4", // open up king diagnonal
-                "d7d5", // open up queen diag
+                "e7e5", // open up queen diag
                 "f4d5", // does not really matter
                 "d8h4", // queen check white king
             }.Select(x => UCINotation.DeserializeMove(x)));
@@ -166,6 +167,14 @@ namespace TestCh
             b.Mutate(UCINotation.DeserializeMove("a5a4"));
             moves = b.GetLegalMoves();
             CollectionAssert.DoesNotContain(moves, enpassantTakes);
+        }
+
+        [TestMethod]
+        public void Test_StartFEN()
+        {
+            Board bFen = new Board(new FenParser.FenParser("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").BoardStateData);
+            Board b = new Board(Enumerable.Empty<Move>());
+            Assert.AreEqual(bFen, b);
         }
     }
 }

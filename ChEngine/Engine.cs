@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Resources;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
@@ -38,14 +40,14 @@ namespace ChEngine
             InterlockedEngineStats.Reset();
 
             // Start with the first tree layer
-            List<TreeNode> lastTreeLayer = initialBoard.GetLegalMoves().Select(x => new TreeNode()
+            ConcurrentBag<TreeNode> lastTreeLayer = new ConcurrentBag<TreeNode>(initialBoard.GetLegalMoves().Select(x => new TreeNode()
             {
                 Board = new Board(moves.Append(x)), // This is far from optimal, but ok since this is only done in init phase
                 Children = null,
                 Evaluation = double.NaN,
                 Parent = null,
                 Move = x
-            }).ToList();
+            }));
 
             // Start building a tree
             List<TreeNode> gameTree = new List<TreeNode>(lastTreeLayer);
@@ -53,22 +55,10 @@ namespace ChEngine
 
             do
             {
-                List<TreeNode> newTreeLayer = new List<TreeNode>();
+                var newTreeLayer = new ConcurrentBag<TreeNode>();
 
-                foreach (var parentNode in lastTreeLayer)
+                Parallel.ForEach(lastTreeLayer, (parentNode, state) =>
                 {
-
-                    //static double EvaluateMove(Board board, Move move)
-                    //{
-                    //    Board clone = (Board)board.Clone();
-                    //    clone.Mutate(move);
-                    //    return Evaluation.GetEvaluation(clone);
-                    //}
-
-                    // only take the x most promising positions for the enemy
-                    //double enemySign = GetSign(parentNode.Board.IsWhiteToMove);
-                    //var smallerWidth = parentNode.Board.GetLegalMoves().OrderByDescending(x => enemySign * EvaluateMove(parentNode.Board, x)).Take(MaxWidth);
-
                     parentNode.Children = new List<TreeNode>();
                     foreach (var possibleMove in parentNode.Board.GetLegalMoves())
                     {
@@ -92,10 +82,10 @@ namespace ChEngine
 
                     parentNode.IsComplete = true;
 
-                    // Timeout applied
+
                     if (cancellationTokenSource.IsCancellationRequested)
-                        break;
-                }
+                        state.Stop();
+                });
 
                 if (cancellationTokenSource.IsCancellationRequested)
                     break;
